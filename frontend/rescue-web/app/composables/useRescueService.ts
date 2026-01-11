@@ -51,12 +51,17 @@ export const useRescueService = () => {
         });
     };
 
+    const getDashboardStats = async () => {
+        return await apiFetch<any>('/dashboard/status'); 
+    };
+
 
     return {
         getAll,
         updateStatus,
         findNearbyTeams,
         assignTeam,
-        getAssignments
+        getAssignments,
+        getDashboardStats
     };
 };
