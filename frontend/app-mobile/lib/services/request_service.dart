@@ -5,21 +5,16 @@ import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import '../models/rescue_request.dart';
 import 'auth_service.dart';
+import '../configs/api_config.dart';
 
 class RequestService {
   // 2. TỰ ĐỘNG ĐỔI IP: Web dùng localhost, Android dùng 10.0.2.2
-  static String get baseUrl {
-    if (kIsWeb) {
-      return 'http://localhost:8000';
-    } else {
-      return 'http://10.0.2.2:8000';
-    }
-  }
+
 
   // --- API 1: TẠO REQUEST ---
   static Future<String?> createRequest(RescueRequest request) async {
     final token = await AuthService.getToken();
-    final url = Uri.parse('$baseUrl/api/requests/rescue');
+    final url = Uri.parse('${ApiConfig.baseUrl}/api/requests/rescue');
 
     try {
       final response = await http.post(
@@ -63,7 +58,7 @@ class RequestService {
     if (files.isEmpty) return;
 
     final token = await AuthService.getToken();
-    final url = Uri.parse('$baseUrl/api/requests/rescue/$rescueId/media');
+    final url = Uri.parse('${ApiConfig.baseUrl}/api/requests/rescue/$rescueId/media');
 
     try {
       var request = http.MultipartRequest('POST', url);
@@ -105,7 +100,7 @@ class RequestService {
   static Future<List<RescueRequest>> getUserRequests() async {
     final token = await AuthService.getToken();
     // Đảm bảo URL này đúng với BE của bạn
-    final url = Uri.parse('$baseUrl/api/requests/my-requests/history');
+    final url = Uri.parse('${ApiConfig.baseUrl}/api/requests/my-requests/history');
 
     try {
       final response = await http.get(
@@ -159,7 +154,7 @@ class RequestService {
   static Future<bool> cancelRequest(String code) async {
     final token = await AuthService.getToken();
     // Thêm /api vào đường dẫn
-    final url = Uri.parse('$baseUrl/api/rescue/$code/status');
+    final url = Uri.parse('${ApiConfig.baseUrl}/api/rescue/$code/status');
 
     try {
       final response = await http.patch(
@@ -180,7 +175,7 @@ class RequestService {
   static Future<List<RescueRequest>> getAllRequests() async {
     final token = await AuthService.getToken();
     // Thêm /api vào đường dẫn
-    final url = Uri.parse('$baseUrl/api/rescue');
+    final url = Uri.parse('${ApiConfig.baseUrl}/api/rescue');
 
     try {
       final response = await http.get(

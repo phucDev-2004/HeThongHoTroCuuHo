@@ -5,17 +5,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:jwt_decoder/jwt_decoder.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart'; // 1. Import thêm cái này
+import '../configs/api_config.dart';
 
 class AuthService {
-  // 2. TỰ ĐỘNG ĐỔI IP
-  static String get baseUrl {
-    if (kIsWeb) {
-      return 'http://localhost:8000';
-    } else {
-      return 'http://10.0.2.2:8000'; // IP cho Emulator Android
-    }
-  }
-
   static Map<String, dynamic>? _currentUser;
 
   // Cấu hình Google Sign In
@@ -29,7 +21,7 @@ class AuthService {
   // --- API ĐĂNG KÝ (Giữ nguyên) ---
   static Future<bool> register(String name, String phone, String password) async {
     try {
-      final url = Uri.parse('$baseUrl/api/auth/register');
+      final url = Uri.parse('${ApiConfig.baseUrl}/api/auth/register');
       final response = await http.post(
         url,
         headers: {'Content-Type': 'application/json'},
@@ -55,7 +47,7 @@ class AuthService {
   static Future<bool> login(String email, String password) async {
     try {
       final response = await http.post(
-        Uri.parse('$baseUrl/api/auth/login'),
+        Uri.parse('${ApiConfig.baseUrl}/api/auth/login'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'identifier': email,
@@ -104,7 +96,7 @@ class AuthService {
 
       // 3. Gửi về Backend
       final response = await http.post(
-        Uri.parse('$baseUrl/api/auth/google'),
+        Uri.parse('${ApiConfig.baseUrl}/api/auth/google'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'token': tokenToSend,

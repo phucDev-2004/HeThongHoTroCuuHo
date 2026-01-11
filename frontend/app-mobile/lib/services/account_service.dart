@@ -3,15 +3,9 @@ import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 import 'auth_service.dart';
 import '../models/account_model.dart';
+import '../configs/api_config.dart';
 
 class AccountService {
-  static String get baseUrl {
-    if (kIsWeb) {
-      return 'http://localhost:8000';
-    } else {
-      return 'http://10.0.2.2:8000';
-    }
-  }
 
   static Future<AccountModel?> getProfile() async {
     // ... (Giữ nguyên hàm getProfile cũ) ...
@@ -19,7 +13,7 @@ class AccountService {
     if (token == null) return null;
     try {
       final response = await http.get(
-        Uri.parse('$baseUrl/api/profile/me'),
+        Uri.parse('${ApiConfig.baseUrl}/api/profile/me'),
         headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
       );
       if (response.statusCode == 200) {
@@ -60,7 +54,7 @@ class AccountService {
 
     try {
       final response = await http.put(
-        Uri.parse('$baseUrl/api/profile/me'),
+        Uri.parse('${ApiConfig.baseUrl}/api/profile/me'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
