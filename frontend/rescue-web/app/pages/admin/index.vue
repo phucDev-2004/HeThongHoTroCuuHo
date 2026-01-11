@@ -11,8 +11,14 @@ import { useRescueService } from '~/composables/useRescueService';
 definePageMeta({ layout: 'admin' });
 
 // --- 1. CONFIG & SERVICE ---
-const { getAll } = useRescueService();
+const { getAll, getDashboardStats } = useRescueService();
 const isLoading = ref(false);
+
+interface DashboardStatResponse {
+    pending_count: number;
+    ready_teams_count: number;
+    processed_today_count: number;
+}
 
 // Interface cho dữ liệu hiển thị trên UI
 interface IncidentUI {
@@ -22,18 +28,18 @@ interface IncidentUI {
   phone: string;
   address: string;
   status: string;
-  time: string; // Hiển thị dạng "Vừa xong"
+  time: string; 
 }
 
 // --- 2. STATE ---
 const recentIncidents = ref<IncidentUI[]>([]);
 
-// --- 3. MOCK DATA (Giữ nguyên cho các phần chưa có API) ---
-const statData = [
-  { title: 'Sự cố đang chờ', value: 12, unit: 'vụ', icon: WarningFilled, color: 'red' as const, change: '+15%', percent: 60 },
-  { title: 'Lực lượng sẵn sàng', value: 5, unit: 'đơn vị', icon: UserFilled, color: 'green' as const, change: '-5%', percent: 50 },
-  { title: 'Đã xử lý hôm nay', value: 28, unit: 'vụ', icon: Finished, color: 'blue' as const, change: '+2%', percent: 28 },
-];
+// --- 3. DATA (SỬA Ở ĐÂY: Chuyển thành ref để cập nhật được) ---
+const statData = ref([
+  { title: 'Sự cố đang chờ', value: 0, unit: 'vụ', icon: WarningFilled, color: 'red' as const, change: '...', percent: 0 },
+  { title: 'Lực lượng sẵn sàng', value: 0, unit: 'đơn vị', icon: UserFilled, color: 'green' as const, change: '...', percent: 0 },
+  { title: 'Đã xử lý hôm nay', value: 0, unit: 'vụ', icon: Finished, color: 'blue' as const, change: '...', percent: 0 },
+]);
 
 const activityLogs = [
   { id: 1, type: 'alert', message: 'Nhận tín hiệu SOS mới từ Q.Bình Thạnh', time: 'Vừa xong', icon: Bell, color: 'text-red-500 bg-red-500/10 border-red-500/20' },
@@ -44,8 +50,6 @@ const activityLogs = [
 ];
 
 // --- 4. HELPERS ---
-
-// Hàm tính thời gian tương đối
 const timeAgo = (dateString: string | undefined) => {
   if (!dateString) return 'N/A';
   const now = new Date();
@@ -58,7 +62,6 @@ const timeAgo = (dateString: string | undefined) => {
   return `${Math.floor(diffInSeconds / 86400)} ngày trước`;
 };
 
-// Hàm lấy màu theo trạng thái
 const getStatusColor = (status: string) => {
     switch(status) {
         case 'Chờ xử lý': return 'text-red-400 bg-red-400/10 border-red-400/20';
@@ -69,7 +72,6 @@ const getStatusColor = (status: string) => {
     }
 };
 
-// Hàm lấy text hiển thị theo trạng thái
 const getStatusText = (status: string) => {
     const map: Record<string, string> = { 
       'PENDING': 'Đang chờ', 
@@ -82,19 +84,17 @@ const getStatusText = (status: string) => {
 
 // --- 5. DATA FETCHING ---
 const fetchRecentIncidents = async () => {
+  // isLoading chỉ dùng cho loading table bên dưới, không block 3 cái card
   isLoading.value = true;
   try {
-    // Gọi API lấy dữ liệu thực tế
-    // Lưu ý: Đảm bảo backend trả về danh sách có các trường tương ứng hoặc chỉnh sửa map() bên dưới
     const response = await getAll({page: 1, page_size: 10 }); 
-    
     const rawData = Array.isArray(response) ? response : (response as any).items || [];
 
     recentIncidents.value = rawData.slice(0, 10).map((item: any) => ({
       id: item.id,
       code: item.code,
       name: item.name || 'Không rõ',
-      phone: item.reporter_phone || '',
+      phone: item.contact_phone || '', // Check lại xem API trả về contact_phone hay reporter_phone
       address: item.address || 'Chưa có định vị',
       status: item.status || 'PENDING',
       time: timeAgo(item.created_at)
@@ -107,12 +107,30 @@ const fetchRecentIncidents = async () => {
   }
 };
 
+// Hàm lấy thống kê
+const fetchStats = async () => {
+  try {
+    const data: DashboardStatResponse = await getDashboardStats();
+    
+    if (data) {
+        // Thêm dấu ! sau chỉ số mảng [0]!
+        // Ý nghĩa: "Chắc chắn phần tử thứ 0 có tồn tại, đừng lo"
+        statData.value[0]!.value = data.pending_count;
+        statData.value[1]!.value = data.ready_teams_count;
+        statData.value[2]!.value = data.processed_today_count;
+    }
+  } catch (error) {
+    console.error("Lỗi khi tải thống kê:", error);
+  }
+}
+
 // Gọi API khi component được mount
 onMounted(() => {
+  // Gọi cả 2 hàm
   fetchRecentIncidents();
+  fetchStats(); 
 });
 </script>
-
 <template>
   <div class="p-0">
     <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">

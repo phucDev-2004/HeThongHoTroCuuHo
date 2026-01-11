@@ -11,6 +11,7 @@ from app.routers.account import router as account_router
 from app.routers.assign import router as assign_task
 from app.routers.rescue_request import router as rescue_request 
 from app.routers.rescue import router as rescue
+from app.routers.dashboard import router as dashboard
 
 
 global_exception_handlers(api)
@@ -19,14 +20,5 @@ api.add_router("/auth", auth_router)                # -> /api/auth/...
 api.add_router("/rescue-teams", assign_task)        # -> /api/rescue-teams/...
 api.add_router("/requests", rescue_request)         # -> /api/requests/...
 api.add_router("/rescue_team", rescue)
-api.add_router("", account_router)        
-
-# Health check endpoint
-@api.get("/health")
-def health_check(request):
-    """Health check endpoint - returns status and environment info"""
-    return {
-        "status": "ok",
-        "env": settings.ENV,
-        "debug": settings.DEBUG
-    } 
+api.add_router("/dashboard", dashboard)
+api.add_router("", account_router)                  # -> /api/accounts/...

@@ -3,13 +3,9 @@ import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 import 'auth_service.dart';
 import '../models/assignment.dart';
+import '../configs/api_config.dart';
 
 class AssignService {
-  // Tự động đổi IP
-  static String get baseUrl {
-    if (kIsWeb) return 'http://localhost:8000';
-    return 'http://10.0.2.2:8000';
-  }
 
   // Helper để lấy Header
   static Future<Map<String, String>> _getHeaders() async {
@@ -22,7 +18,7 @@ class AssignService {
 
   // 1. LẤY DANH SÁCH NHIỆM VỤ
   static Future<List<Assignment>> getMyAssignments() async {
-    final url = Uri.parse('$baseUrl/api/rescue-teams/assignments');
+    final url = Uri.parse('${ApiConfig.baseUrl}/api/rescue-teams/assignments');
     try {
       final response = await http.get(url, headers: await _getHeaders());
 
@@ -39,7 +35,7 @@ class AssignService {
 
   // 2. XÁC NHẬN XUẤT PHÁT
   static Future<bool> confirmStart(String assignmentId) async {
-    final url = Uri.parse('$baseUrl/api/rescue-teams/task/start');
+    final url = Uri.parse('${ApiConfig.baseUrl}/api/rescue-teams/task/start');
     try {
       final response = await http.post(
         url,
@@ -54,7 +50,7 @@ class AssignService {
 
   // 3. XÁC NHẬN ĐẾN NƠI
   static Future<bool> confirmArrived(String assignmentId) async {
-    final url = Uri.parse('$baseUrl/api/rescue-teams/task/arrived');
+    final url = Uri.parse('${ApiConfig.baseUrl}/api/rescue-teams/task/arrived');
     try {
       final response = await http.post(
         url,
@@ -69,7 +65,7 @@ class AssignService {
 
   // 4. HOÀN THÀNH NHIỆM VỤ
   static Future<bool> completeTask(String assignmentId, String note) async {
-    final url = Uri.parse('$baseUrl/api/rescue-teams/task/complete');
+    final url = Uri.parse('${ApiConfig.baseUrl}/api/rescue-teams/task/complete');
     try {
       final response = await http.post(
         url,

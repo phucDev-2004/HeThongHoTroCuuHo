@@ -9,20 +9,19 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  
   # Map
   flutter_map: ^8.2.2
   latlong2: ^0.9.1
-  
+
   # Date formatting
   intl: ^0.18.1
-  
+
   # Image picker for media upload
   image_picker: ^1.0.4
 
   google_sign_in: ^6.2.1
 
-  # HTTP requests (for future API integration)
+  # HTTP requests
   http: ^1.1.0
   shared_preferences: ^2.2.2
   jwt_decoder: ^2.0.1

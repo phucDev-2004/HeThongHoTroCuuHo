@@ -4,6 +4,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/request_service.dart';
+import '../configs/api_config.dart';
 
 class UserRequestDetailScreen extends StatefulWidget {
   final Map<String, dynamic> request;
@@ -24,7 +25,7 @@ class _UserRequestDetailScreenState extends State<UserRequestDetailScreen> {
       return path;
     }
 
-    String baseUrl = RequestService.baseUrl;
+    String baseUrl = ApiConfig.baseUrl;
     if (baseUrl.endsWith('/api')) {
       baseUrl = baseUrl.replaceAll('/api', '');
     }

@@ -3,15 +3,10 @@ import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 import 'auth_service.dart';
 import '../models/rescue_team.dart';
+import '../configs/api_config.dart';
+
 
 class RescueTeamService {
-  static String get baseUrl {
-    if (kIsWeb) {
-      return 'http://localhost:8000';
-    } else {
-      return 'http://10.0.2.2:8000';
-    }
-  }
 
   // 1. Lấy thông tin đội (/me)
   static Future<RescueTeamModel?> getMyTeam() async {
@@ -20,7 +15,7 @@ class RescueTeamService {
 
     try {
       final response = await http.get(
-        Uri.parse('$baseUrl/api/rescue_team/me'),
+        Uri.parse('${ApiConfig.baseUrl}/api/rescue_team/me'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -46,7 +41,7 @@ class RescueTeamService {
 
     try {
       final response = await http.patch(
-        Uri.parse('$baseUrl/api/rescue_team/$teamId'),
+        Uri.parse('${ApiConfig.baseUrl}/api/rescue_team/$teamId'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',

@@ -3,15 +3,14 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/rescue_request.dart';
 import 'auth_service.dart';
+import '../configs/api_config.dart';
 
 class RequestService {
-  // Nhớ đổi IP nếu chạy máy thật (VD: 192.168.1.x)
-  static const String baseUrl = 'http://10.0.2.2:8000';
 
   // --- API 1: TẠO REQUEST ---
   static Future<String?> createRequest(RescueRequest request) async {
     final token = await AuthService.getToken();
-    final url = Uri.parse('$baseUrl/rescue'); // Endpoint tạo mới
+    final url = Uri.parse('${ApiConfig.baseUrl}/rescue'); // Endpoint tạo mới
 
     try {
       final response = await http.post(
@@ -51,7 +50,7 @@ class RequestService {
   // --- API 2: UPLOAD ẢNH ---
   static Future<void> uploadMedia(String rescueId, List<String> filePaths) async {
     final token = await AuthService.getToken();
-    final url = Uri.parse('$baseUrl/rescue/$rescueId/media');
+    final url = Uri.parse('${ApiConfig.baseUrl}/rescue/$rescueId/media');
 
     try {
       var request = http.MultipartRequest('POST', url);
@@ -74,7 +73,7 @@ class RequestService {
   static Future<List<RescueRequest>> getUserRequests(String userName) async {
     final token = await AuthService.getToken();
     // Endpoint lấy lịch sử (Backend cần hỗ trợ route này)
-    final url = Uri.parse('$baseUrl/rescue/history');
+    final url = Uri.parse('${ApiConfig.baseUrl}/rescue/history');
 
     try {
       final response = await http.get(
@@ -99,7 +98,7 @@ class RequestService {
     final token = await AuthService.getToken();
     // Giả định backend có route: PATCH /rescue/{code}/cancel
     // Hoặc PUT /rescue/{code} body: {"status": "cancelled"}
-    final url = Uri.parse('$baseUrl/rescue/$code/status');
+    final url = Uri.parse('${ApiConfig.baseUrl}/rescue/$code/status');
 
     try {
       final response = await http.patch( // Hoặc PUT tùy backend
