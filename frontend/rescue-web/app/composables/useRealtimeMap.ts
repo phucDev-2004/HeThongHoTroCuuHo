@@ -58,7 +58,7 @@ export const useRealtimeMap = () => {
       // 2. Nếu chạy VPS (IP thật) -> Tạm thời cũng thêm :8000 (trừ khi bạn đã cấu hình Nginx proxy /ws/)
       // Nếu bạn đã cấu hình Nginx thì xóa dòng else if này đi
       else {
-         port = ':8000'; 
+        //  port = ':8000';
       }
 
       // Endpoint: /ws/rescue/ (Khớp với routing.py của Backend)
