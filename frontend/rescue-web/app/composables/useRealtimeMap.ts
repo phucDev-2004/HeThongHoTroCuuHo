@@ -1,13 +1,9 @@
-// composables/useRealtimeMap.ts
 import { ref, shallowRef, onMounted, onBeforeUnmount, watch } from 'vue';
-import type { MapPoint, MapBounds, BackendPoint } from '~/types/map';
+import type { MapBounds, BackendPoint } from '~/types/map';
 
 export const useRealtimeMap = () => {
-  const config = useRuntimeConfig();
-  // Lấy giá trị cấu hình, có thể là undefined, '/api', hoặc 'http://...'
-  const API_BASE = config.public.apiBase as string | undefined; 
-  
-  const { apiFetch } = useApiClient();
+  // Config & State
+  const { apiFetch } = useApiClient(); // Đảm bảo bạn có composable này
   const tokenCookie = useCookie('access_token');
 
   const points = shallowRef<BackendPoint[]>([]);
@@ -16,10 +12,10 @@ export const useRealtimeMap = () => {
   let socket: WebSocket | null = null;
   let reconnectTimer: NodeJS.Timeout | null = null;
 
-  // ... (giữ nguyên hàm fetchPoints) ...
+  // 1. Fetch điểm từ API
   const fetchPoints = async (bounds?: MapBounds) => {
     try {
-      const res = await apiFetch<BackendPoint[]>('api/requests/map-points', {
+      const res = await apiFetch<BackendPoint[]>('/requests/map-points', { 
         params: {
           min_lat: bounds?.min_lat ?? 8.0,
           max_lat: bounds?.max_lat ?? 12.0,
@@ -28,16 +24,20 @@ export const useRealtimeMap = () => {
           zoom: bounds?.zoom ?? 10
         }
       });
-      if (Array.isArray(res)) points.value = res;
+      if (Array.isArray(res)) {
+        points.value = res;
+      }
     } catch (error) {
       console.error('Fetch error:', error);
     }
   };
 
-  // --- LOGIC WEBSOCKET MỚI ---
+  // 2. Kết nối WebSocket (Đã fix logic Port)
   const connectWebSocket = () => {
+    if (typeof window === 'undefined') return; // Chỉ chạy ở Client
+
     if (!tokenCookie.value) {
-      console.warn('⚠️ WS: Missing Token');
+      console.warn('⚠️ WS: Chưa có Token');
       return;
     }
 
@@ -46,32 +46,25 @@ export const useRealtimeMap = () => {
     socketStatus.value = 'CONNECTING';
 
     try {
-      // 1. Xác định Host và Protocol
-      let wsHost = '127.0.0.1:8000'; // Mặc định Backend Port
-      let wsProtocol = 'ws:';
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const host = window.location.hostname; 
+      let port = '';
 
-      if (API_BASE && (API_BASE.startsWith('http://') || API_BASE.startsWith('https://'))) {
-        // Trường hợp API_BASE là URL tuyệt đối (ví dụ cấu hình Production)
-        const urlObj = new URL(API_BASE);
-        wsHost = urlObj.host;
-        wsProtocol = urlObj.protocol === 'https:' ? 'wss:' : 'ws:';
-      } else {
-        // Trường hợp API_BASE là '/api' hoặc undefined (Development/Proxy)
-        // Lưu ý: WebSocket KHÔNG đi qua Nuxt Proxy (routeRules) được dễ dàng
-        // Nên ta trỏ thẳng về Backend Port 8000
-        wsHost = '127.0.0.1:8000'; 
-        
-        // Nếu trang web đang chạy https (production deploy), buộc dùng wss
-        if (typeof window !== 'undefined' && window.location.protocol === 'https:') {
-            wsProtocol = 'wss:';
-        }
+      // --- LOGIC QUAN TRỌNG ---
+      // 1. Nếu chạy Localhost -> Thêm port :8000
+      if (host === 'localhost' || host === '127.0.0.1') {
+         port = ':8000'; 
+      } 
+      // 2. Nếu chạy VPS (IP thật) -> Tạm thời cũng thêm :8000 (trừ khi bạn đã cấu hình Nginx proxy /ws/)
+      // Nếu bạn đã cấu hình Nginx thì xóa dòng else if này đi
+      else {
+         port = ':8000'; 
       }
 
-      // 2. Tạo URL (Đảm bảo không có /api ở path)
-      // URL chuẩn: ws://127.0.0.1:8000/ws/map/?token=...
-      const wsUrl = `${wsProtocol}//${wsHost}/ws/map/?token=${tokenCookie.value}`;
+      // Endpoint: /ws/rescue/ (Khớp với routing.py của Backend)
+      const wsUrl = `${protocol}//${host}${port}/ws/map/?token=${tokenCookie.value}`;
 
-      console.log('🔗 WS Target:', wsUrl);
+      console.log('🔗 Connecting WS:', wsUrl);
 
       socket = new WebSocket(wsUrl);
 
@@ -85,28 +78,48 @@ export const useRealtimeMap = () => {
         console.warn(`🔴 WS Closed: ${event.code}`);
         socketStatus.value = 'CLOSED';
         socket = null;
-        if (event.code !== 1000) reconnectTimer = setTimeout(connectWebSocket, 5000);
+        if (event.code !== 1000) {
+            reconnectTimer = setTimeout(connectWebSocket, 3000);
+        }
       };
 
       socket.onmessage = (event) => {
         try {
-          const data = JSON.parse(event.data);
-          handleSocketMessage(data);
+          const payload = JSON.parse(event.data);
+          handleSocketMessage(payload);
         } catch (e) { console.error('WS JSON Error', e); }
       };
 
     } catch (err) {
-      console.error('🔥 WS Connection Failed:', err);
+      console.error('🔥 WS Error:', err);
       socketStatus.value = 'CLOSED';
     }
   };
 
-  // ... (Giữ nguyên handleSocketMessage, watch, onMounted, onBeforeUnmount) ...
-  const handleSocketMessage = (data: any) => { /* ...code cũ... */ };
+  // 3. Xử lý tin nhắn đến
+  const handleSocketMessage = (payload: any) => {
+    const eventName = payload.data?.event;
+    const data = payload.data?.data;
+
+    if (eventName === 'NEW_REQUEST') {
+        // Hiện thông báo (Alert)
+        if (typeof window !== 'undefined') {
+            alert(`🆘 CÓ YÊU CẦU MỚI!\nTại: ${data.address}\nSĐT: ${data.contact_phone}`);
+        }
+        // Load lại map
+        fetchPoints();
+    }
+  };
   
-  watch(tokenCookie, (newToken) => { if(newToken) { socket?.close(); connectWebSocket(); } });
+  // 4. Lifecycle
+  watch(tokenCookie, (newToken) => { 
+      if (!newToken) socket?.close(1000);
+      else connectWebSocket();
+  });
   
-  onMounted(() => { if (tokenCookie.value) connectWebSocket(); });
+  onMounted(() => { 
+      if (tokenCookie.value) connectWebSocket(); 
+  });
   
   onBeforeUnmount(() => { 
     if (reconnectTimer) clearTimeout(reconnectTimer);

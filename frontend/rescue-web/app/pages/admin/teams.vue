@@ -1,98 +1,77 @@
 <script setup lang="ts">
 import { ref, onMounted, reactive } from 'vue';
-import { Edit, Location, Phone, User, MapLocation, House, Refresh } from '@element-plus/icons-vue';
+import { 
+    Edit, Location, Phone, User, MapLocation, House, Refresh,
+    FirstAidKit, Van, StarFilled, HelpFilled, Aim
+} from '@element-plus/icons-vue';
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus';
 import type { Rescue } from '~/types/rescue';
 
 definePageMeta({ layout: 'admin' });
 
 // --- 1. CONFIG & CONSTANTS ---
-// Danh sách loại đội theo Constraint Database
 const TEAM_TYPES = [
-    { label: 'CỨU HỎA', value: 'CỨU HỎA', color: 'danger' },
-    { label: 'Y TẾ', value: 'Y TẾ', color: 'success' },
-    { label: 'CÔNG AN', value: 'CÔNG AN', color: 'warning' },
-    { label: 'CỨU HỘ', value: 'CỨU HỘ', color: 'primary' }
+    { label: 'CỨU HỎA', value: 'CỨU HỎA', color: 'danger', icon: Van, class: 'bg-red-50 text-red-600 border-red-100' },
+    { label: 'Y TẾ', value: 'Y TẾ', color: 'success', icon: FirstAidKit, class: 'bg-green-50 text-green-600 border-green-100' },
+    { label: 'CÔNG AN', value: 'CÔNG AN', color: 'primary', icon: StarFilled, class: 'bg-blue-50 text-blue-600 border-blue-100' },
+    { label: 'CỨU HỘ', value: 'CỨU HỘ', color: 'warning', icon: HelpFilled, class: 'bg-orange-50 text-orange-600 border-orange-100' }
 ];
 
-// Danh sách trạng thái (Giả định mapping với Backend)
 const TEAM_STATUS = [
-    { label: 'Sẵn sàng', value: 'AVAILABLE', color: 'success' },
-    { label: 'Đang bận', value: 'BUSY', color: 'danger' },
+    { label: 'Sẵn sàng', value: 'Sẵn sàng', color: '#10b981' }, 
+    { label: 'Đang bận', value: 'Đang bận', color: '#ef4444' },      
 ];
 
-// --- 2. SERVICE & STATE ---
+// --- 2. LOGIC & STATE ---
 const { getTeams, updateTeam } = useAdminService();
 const loading = ref(false);
 const submitting = ref(false);
 const teams = ref<Rescue[]>([]);
 const editDialog = ref(false);
-
-// Form Reference để validate
 const formRef = ref<FormInstance>();
-
-// Dữ liệu đang chỉnh sửa
 const currentTeam = ref<Rescue>({} as Rescue);
 
-// Rules validate
 const rules = reactive<FormRules>({
     name: [{ required: true, message: 'Vui lòng nhập tên đội', trigger: 'blur' }],
     team_type: [{ required: true, message: 'Vui lòng chọn loại đội', trigger: 'change' }],
     contact_phone: [{ required: true, message: 'Nhập SĐT liên hệ', trigger: 'blur' }],
-    leader_name: [{ required: true, message: 'Nhập tên đội trưởng', trigger: 'blur' }],
-    latitude: [{ required: true, message: 'Nhập vĩ độ', trigger: 'blur' }],
-    longitude: [{ required: true, message: 'Nhập kinh độ', trigger: 'blur' }],
+    latitude: [{ required: true, message: 'Bắt buộc', trigger: 'blur' }],
+    longitude: [{ required: true, message: 'Bắt buộc', trigger: 'blur' }],
 });
 
-// --- 3. METHODS ---
+// Helper lấy metadata cho Table
+const getTeamMeta = (type: string) => {
+    return TEAM_TYPES.find(t => t.value === type) || { 
+        color: 'info', icon: HelpFilled, class: 'bg-gray-50 text-gray-600 border-gray-200' 
+    };
+};
+
 const fetchTeams = async () => {
     loading.value = true;
     try {
         teams.value = await getTeams();
-    } catch (e) {
-        console.error(e);
-        ElMessage.error('Không thể tải danh sách đội.');
-    } finally {
-        loading.value = false;
-    }
+    } catch { ElMessage.error('Không thể tải dữ liệu'); } 
+    finally { loading.value = false; }
 };
 
 const openEdit = (row: Rescue) => {
     currentTeam.value = { ...row }; 
     editDialog.value = true;
-    setTimeout(() => formRef.value?.clearValidate(), 0);
+    setTimeout(() => formRef.value?.clearValidate(), 50);
 };
 
 const handleUpdate = async (formEl: FormInstance | undefined) => {
     if (!formEl) return;
-    
-    // 1. Validate Form
     await formEl.validate(async (valid) => {
         if (valid && currentTeam.value.id) {
             submitting.value = true;
             try {
-                // 2. Chuẩn bị payload (Chỉ gửi các trường cần update)
-                const payload = {
-                    name: currentTeam.value.name,
-                    contact_phone: currentTeam.value.contact_phone,
-                    leader_name: currentTeam.value.leader_name,
-                    hotline: currentTeam.value.hotline,
-                    team_type: currentTeam.value.team_type,
-                    latitude: Number(currentTeam.value.latitude), // Đảm bảo là số
-                    longitude: Number(currentTeam.value.longitude),
-                    address: currentTeam.value.address,
-                    primary_area: currentTeam.value.primary_area,
-                    status: currentTeam.value.status,
-                };
-
-                // 3. Gọi API
-                await updateTeam(currentTeam.value.id, payload);
-                
-                ElMessage.success('Cập nhật thông tin thành công!');
+                await updateTeam(currentTeam.value.id, currentTeam.value);
+                ElMessage.success('Cập nhật thành công!');
                 editDialog.value = false;
-                fetchTeams(); // Reload data
-            } catch (e) {
-                ElMessage.error('Lỗi cập nhật: ' + (e as any).message);
+                fetchTeams();
+            } catch (e: any) {
+                ElMessage.error(e.message || 'Lỗi cập nhật');
             } finally {
                 submitting.value = false;
             }
@@ -100,119 +79,120 @@ const handleUpdate = async (formEl: FormInstance | undefined) => {
     });
 };
 
-const getTeamTypeColor = (type: string): 'danger' | 'success' | 'warning' | 'primary' | 'info' => {
-    const found = TEAM_TYPES.find(t => t.value === type);
-    return found ? (found.color as 'danger' | 'success' | 'warning' | 'primary' | 'info') : 'info';
-};
-
-const getStatusColor = (status: string): 'danger' | 'success' | 'warning' | 'primary' | 'info' => {
-    const found = TEAM_STATUS.find(s => s.value === status);
-    return found ? (found.color as 'danger' | 'success' | 'warning' | 'primary' | 'info') : 'info';
-};
-
-// Format ngày tháng
-const formatDate = (dateString: string) => {
-    if (!dateString) return '';
-    return new Date(dateString).toLocaleDateString('vi-VN');
-};
-
 onMounted(fetchTeams);
 </script>
 
 <template>
-    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-100 min-h-[600px]">
-        <div class="flex justify-between items-center mb-6">
-            <div>
-                <h2 class="text-xl font-bold text-slate-800">Quản Lý Đội Cứu Hộ</h2>
-                <p class="text-slate-500 text-sm mt-1">Danh sách và cập nhật trạng thái các đơn vị</p>
+    <div class="min-h-screen bg-slate-50/50 p-6 space-y-6">
+        
+        <div class="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+            <div class="flex items-center gap-4">
+                <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center text-white shadow-md shadow-blue-200">
+                    <el-icon :size="24"><Van /></el-icon>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold text-slate-800 tracking-tight">Đội Phản Ứng Nhanh</h1>
+                    <p class="text-sm text-slate-500 font-medium">Quản lý {{ teams.length }} đơn vị cứu hộ & tài nguyên</p>
+                </div>
             </div>
-            <el-button type="primary" plain :icon="Refresh" @click="fetchTeams">Làm mới</el-button>
+            <el-button :icon="Refresh" circle plain @click="fetchTeams" class="!border-slate-200 hover:!bg-slate-50 hover:!text-indigo-600 transition-colors" />
         </div>
 
-        <el-table :data="teams" v-loading="loading" stripe highlight-current-row style="width: 100%" class="custom-table">
-            
-            <el-table-column label="Đơn vị / Loại hình" min-width="220">
-                <template #default="{ row }">
-                    <div class="flex flex-col gap-1">
-                        <span class="font-bold text-slate-800 text-base">{{ row.name }}</span>
-                        <el-tag size="small" :type="getTeamTypeColor(row.team_type)" effect="plain" class="w-fit font-bold">
-                            {{ row.team_type }}
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <el-table 
+                :data="teams" 
+                v-loading="loading" 
+                style="width: 100%" 
+                :header-cell-style="{ background: '#f8fafc', color: '#475569', fontWeight: '600', padding: '12px', fontSize: '13px' }"
+                row-class-name="hover:bg-slate-50/80 transition-colors group"
+            >
+                <el-table-column label="Đơn vị & Loại hình" min-width="260">
+                    <template #default="{ row }">
+                        <div class="flex items-center gap-4 py-2">
+                            <div class="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 border"
+                                 :class="getTeamMeta(row.team_type).class">
+                                <el-icon :size="22"><component :is="getTeamMeta(row.team_type).icon" /></el-icon>
+                            </div>
+                            <div class="flex flex-col gap-1">
+                                <span class="font-bold text-slate-800 text-[15px] leading-tight">{{ row.name }}</span>
+                                <span class="text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-500 w-fit border border-slate-200">
+                                    {{ row.team_type }}
+                                </span>
+                            </div>
+                        </div>
+                    </template>
+                </el-table-column>
+
+                <el-table-column label="Chỉ huy & Liên hệ" min-width="200">
+                    <template #default="{ row }">
+                        <div class="space-y-1.5">
+                            <div class="flex items-center gap-2">
+                                <el-avatar :size="24" class="bg-indigo-100 text-indigo-600 text-[10px] font-bold">
+                                    {{ row.leader_name?.charAt(0) }}
+                                </el-avatar>
+                                <span class="text-sm font-semibold text-slate-700">{{ row.leader_name || '---' }}</span>
+                            </div>
+                            <div class="flex items-center gap-2 pl-1">
+                                <el-icon class="text-slate-400 text-xs"><Phone /></el-icon>
+                                <span class="text-sm text-slate-600 font-mono">{{ row.contact_phone }}</span>
+                            </div>
+                        </div>
+                    </template>
+                </el-table-column>
+
+                <el-table-column label="Hotline SOS" width="160">
+                    <template #default="{ row }">
+                        <div v-if="row.hotline" class="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-red-50 border border-red-100 text-red-600">
+                            <el-icon class="text-sm animate-pulse"><Aim /></el-icon> 
+                            <span class="font-bold text-sm font-mono">{{ row.hotline }}</span>
+                        </div>
+                        <span v-else class="text-slate-300 text-xs italic pl-2">---</span>
+                    </template>
+                </el-table-column>
+
+                <el-table-column label="Khu vực & Vị trí" min-width="220">
+                    <template #default="{ row }">
+                        <div class="flex flex-col gap-1.5">
+                            <div class="flex items-center gap-2">
+                                <el-icon class="text-slate-400"><MapLocation /></el-icon>
+                                <span class="text-sm font-medium text-slate-700">{{ row.primary_area || 'Chưa phân vùng' }}</span>
+                            </div>
+                            <div class="flex items-start gap-2">
+                                <el-icon class="text-slate-400 mt-0.5 shrink-0"><House /></el-icon>
+                                <span class="text-xs text-slate-500 line-clamp-2 leading-relaxed" :title="row.address">
+                                    {{ row.address }}
+                                </span>
+                            </div>
+                        </div>
+                    </template>
+                </el-table-column>
+
+                <el-table-column label="Trạng thái" width="140" align="center">
+                    <template #default="{ row }">
+                        <el-tag 
+                            :type="row.status === 'Sẵn sàng' ? 'success' : 'danger'" 
+                            effect="dark" 
+                            round
+                        >
+                            {{ row.status }}
                         </el-tag>
-                    </div>
-                </template>
-            </el-table-column>
+                    </template>
+                </el-table-column>
 
-            <el-table-column label="Đội trưởng" min-width="150">
-                <template #default="{ row }">
-                    <div class="flex items-center gap-2 text-slate-700">
-                        <el-icon><User /></el-icon>
-                        <span class="font-medium">{{ row.leader_name || '---' }}</span>
-                    </div>
-                </template>
-            </el-table-column>
-            
-            <el-table-column label="Liên hệ" width="200">
-                <template #default="{ row }">
-                    <div class="text-sm flex flex-col gap-1">
-                        <div class="flex items-center gap-2">
-                            <el-icon class="text-slate-400"><Phone /></el-icon> 
-                            <span>{{ row.contact_phone }}</span>
-                        </div>
-                        <div v-if="row.hotline" class="flex items-center gap-2 text-red-500 font-medium">
-                            <el-icon><Phone /></el-icon> 
-                            <span>Hotline: {{ row.hotline }}</span>
-                        </div>
-                    </div>
-                </template>
-            </el-table-column>
-
-            <el-table-column label="Khu vực hoạt động" min-width="100">
-                <template #default="{ row }">
-                    <div class="flex flex-col gap-1 text-sm">
-                        <span class="font-semibold text-slate-700">{{ row.primary_area }}</span>
-                    </div>
-                </template>
-            </el-table-column>
-
-            <el-table-column label="Trụ sở chính" min-width="250">
-                <template #default="{ row }">
-                    <div class="flex flex-col gap-1 text-sm">
-                        <span class="text-slate-500 truncate" :title="row.address">
-                            <el-icon class="mr-1"><House /></el-icon>{{ row.address }}
-                        </span>
-                    </div>
-                </template>
-            </el-table-column>
-
-           
-            <el-table-column label="Tọa độ" width="160">
-                <template #default="{ row }">
-                    <div v-if="row.latitude && row.longitude" class="text-xs font-mono text-slate-600 bg-slate-50 p-1 rounded border text-center">
-                        <div>Lat: {{ Number(row.latitude).toFixed(4) }}</div>
-                        <div>Lng: {{ Number(row.longitude).toFixed(4) }}</div>
-                    </div>
-                    <span v-else class="text-slate-400 italic text-xs">Chưa có GPS</span>
-                </template>
-            </el-table-column>
-
-            <el-table-column label="Trạng thái" width="140" align="center">
-                <template #default="{ row }">
-                    <el-tag 
-                        :type="row.status === 'Sẵn sàng' ? 'success' : 'danger'" 
-                        effect="dark" 
-                        round
-                    >
-                        {{ row.status }}
-                    </el-tag>
-                </template>
-            </el-table-column>
-
-            <el-table-column width="80" align="center" fixed="right">
-                <template #default="{ row }">
-                    <el-button :icon="Edit" circle type="primary" @click="openEdit(row)" title="Chỉnh sửa"/>
-                </template>
-            </el-table-column>
-        </el-table>
+                <el-table-column width="80" align="center" fixed="right">
+                    <template #default="{ row }">
+                        <el-button 
+                            type="primary" 
+                            :icon="Edit" 
+                            circle 
+                            plain 
+                            @click="openEdit(row)" 
+                            class="!border-slate-200 !text-slate-400 hover:!text-blue-600 hover:!border-blue-200 hover:!bg-blue-50 transition-all" 
+                        />
+                    </template>
+                </el-table-column>
+            </el-table>
+        </div>
 
         <el-dialog v-model="editDialog" title="Cập Nhật Thông Tin Đội Cứu Hộ" width="700px" destroy-on-close align-center>
             <el-form ref="formRef" :model="currentTeam" :rules="rules" label-position="top" class="custom-form">
@@ -314,8 +294,8 @@ onMounted(fetchTeams);
 </template>
 
 <style scoped>
-/* Tùy chỉnh nhỏ để bảng đẹp hơn */
-.custom-table :deep(.el-table__row) {
-    cursor: pointer;
+/* Giữ nguyên style tùy chỉnh nhỏ */
+.custom-form :deep(.el-input-number .el-input__inner) {
+    text-align: left;
 }
 </style>

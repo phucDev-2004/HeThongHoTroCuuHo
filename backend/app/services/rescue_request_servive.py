@@ -7,6 +7,10 @@ from django.db.models import Q
 from django.utils import timezone
 from ninja import UploadedFile
 import json
+
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
+
 def dictfetchall(cursor):
     """
     Return all rows from a cursor as a dict
@@ -25,6 +29,10 @@ class RescueRequestService():
 
         lat = payload.pop("latitude")
         lng = payload.pop("longitude")
+
+        address = payload.get("address")
+        name = payload.get("name")
+        contact_phone = payload.get("contact_phone")
 
         province_code = payload.pop('code', 'VN')
 
@@ -47,7 +55,7 @@ class RescueRequestService():
                         gen_random_uuid(), %s, %s, %s, %s, %s, %s, %s, %s, %s,
                         ST_SetSRID(ST_MakePoint(%s, %s), 4326), %s
                     )
-                    RETURNING id, code , status
+                    RETURNING id, code , status, created_at
                     """,
                     [
                         new_code,
@@ -64,18 +72,59 @@ class RescueRequestService():
                         payload.get("account_id"),
                     ]
                 )
-                request_id, code, status = cursor.fetchone()
+                request_id, code, status, created_at = cursor.fetchone()
+            socket_data = {
+                "id": str(request_id),
+                "code": code,
+                "status": status,
+                "latitude": lat,
+                "longitude": lng,
+                "address": address,
+                "name": name,
+                "contact_phone": contact_phone,
+                "time": created_at.isoformat() if created_at else str(timezone.now()),
+                "people_summary": RescueRequestService._format_people_summary(payload),
+            }
+
+            # Định nghĩa bắn tin
+            def send_socket_notification():
+                channel_layer = get_channel_layer()
+                async_to_sync(channel_layer.group_send)(
+                    "rescue_admin",  # Gửi cho Admin
+                    {
+                        "type": "send_update", # Hàm xử lý bên Consumer
+                        "data": {
+                            "event": "NEW_REQUEST",
+                            "data": socket_data
+                        }
+                    }
+                )
+
+            # Chỉ bắn Socket khi Transaction thành công để tránh trường hợp Socket nhận được tin mà DB chưa lưu xong
+            transaction.on_commit(send_socket_notification)
         return {
             "id": request_id,
             "code": code,
             "status": status
         }
-            
-            # --- Logic mở rộng ---
-            # Ví dụ: Gửi thông báo socket realtime cho admin
-            # notify_admin_new_request(instance)
-            # return instance_request
+    
+    @staticmethod
+    def _format_people_summary(payload):
+        adults = payload.get("adults", 0) or 0
+        children = payload.get("children", 0) or 0
+        elderly = payload.get("elderly", 0) or 0
+        total = adults + children + elderly
         
+        if total == 0: return "0"
+        
+        details = []
+        if adults > 0: details.append(f"{adults} lớn")
+        if children > 0: details.append(f"{children} nhỏ")
+        if elderly > 0: details.append(f"{elderly} già")
+        
+        return f"{total} ({', '.join(details)})"
+            
+
     def upload_media(request_id: str, files: List[UploadedFile]):
         try:
             req = RescueRequest.objects.get(id=request_id)
@@ -231,7 +280,7 @@ class RescueRequestService():
         return cls._execute_search_query(conditions, params, page, size)
     
     @staticmethod
-    def _calculate_grid_size(zoom: int, cluster_radius_px: int = 60) -> float:
+    def _calculate_grid_size(zoom: int, cluster_radius_px: int = 30) -> float:
         """
         Tính kích thước ô lưới (mét) dựa trên mức zoom và bán kính pixel mong muốn.
         
@@ -264,6 +313,8 @@ class RescueRequestService():
                     min_lng: float, max_lng: float,
                     zoom: int):
 
+        import math
+        zoom = math.floor(float(zoom))
         radius = cls._calculate_grid_size(zoom)
 
         base_params = {
