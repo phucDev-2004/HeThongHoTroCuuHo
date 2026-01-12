@@ -1,64 +1,78 @@
 import L from 'leaflet';
 
 export const useMapIcons = () => {
-  // Cache để không phải tạo lại object Icon mỗi lần render
-  const iconCache = new Map<string, L.Icon>();
+  // Hàm tạo HTML cho Marker bằng CSS (Nhẹ hơn ảnh PNG rất nhiều)
+  const createHtmlIcon = (color: string, isPulse: boolean = false) => {
+    // Nếu là trạng thái khẩn cấp (isPulse = true), thêm class animation
+    const pulseHtml = isPulse 
+      ? `<span class="absolute inline-flex h-full w-full rounded-full opacity-75 animate-ping" style="background-color: ${color}"></span>` 
+      : '';
 
-  // 1. Thêm đầy đủ các màu có trong bộ thư viện leaflet-color-markers
-  const ICONS = {
-    blue: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
-    red: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
-    green: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
-    orange: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-orange.png',
-    yellow: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-gold.png',
-    violet: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-violet.png',
-    grey: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-grey.png',
-    black: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-black.png',
+    return L.divIcon({
+      className: 'custom-css-icon', // Class rỗng để reset style mặc định của Leaflet
+      html: `
+        <div class="relative flex items-center justify-center w-6 h-6">
+          ${pulseHtml}
+          <div style="
+            background-color: ${color};
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            border: 2px solid white;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          ">
+            <div style="width: 8px; height: 8px; background: white; border-radius: 50%;"></div>
+          </div>
+          <div style="
+            position: absolute;
+            bottom: -6px;
+            width: 0; 
+            height: 0; 
+            border-left: 6px solid transparent;
+            border-right: 6px solid transparent;
+            border-top: 8px solid ${color};
+          "></div>
+        </div>
+      `,
+      iconSize: [24, 30],   // Kích thước icon
+      iconAnchor: [12, 30], // Điểm neo (mũi nhọn chạm đất)
+      popupAnchor: [0, -32] // Điểm hiện popup
+    });
   };
 
-  const SHADOW_URL = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png';
+  const getIcon = (status: string | null = ''): L.DivIcon => {
+    const s = String(status).toLowerCase().trim();
 
-  // 2. Logic ánh xạ Status -> Màu icon
-  const getIconColorKey = (status: string | null = ''): keyof typeof ICONS => {
-    if (!status) return 'grey'; // Không có status thì trả về xám
-
-    const s = status.toLowerCase().trim();
-
-    // --- KHẨN CẤP: MÀU ĐỎ ---
-    if (s === 'chờ xử lý' || s === 'pending') return 'red';
-
-    // --- ĐÃ PHÂN CÔNG: MÀU CAM ---
-    if (s === 'đã phân công' || s === 'assigned' || s === 'processing') return 'orange';
-
-    // --- ĐANG THỰC HIỆN: MÀU XANH DƯƠNG ---
-    if (s === 'đang thực hiện' || s === 'in_progress') return 'blue';
-
-    // --- HOÀN THÀNH: MÀU XANH LÁ ---
-    if (s === 'hoàn thành' || s === 'finished' || s === 'done') return 'green';
-
-    // --- AN TOÀN: MÀU TÍM (Thay cho Cyan vì bộ icon này không có Cyan) ---
-    if (s === 'an toàn' || s === 'safe') return 'violet';
-
-    // --- HỦY / KHÁC: MÀU XÁM ---
-    return 'grey';
-  };
-
-  const getIcon = (status?: string | null): L.Icon => {
-    const colorKey = getIconColorKey(status);
-    
-    // Kiểm tra cache xem đã tạo icon màu này chưa
-    if (!iconCache.has(colorKey)) {
-      iconCache.set(colorKey, new L.Icon({
-        iconUrl: ICONS[colorKey],
-        shadowUrl: SHADOW_URL,
-        iconSize: [25, 41],
-        iconAnchor: [12, 41],
-        popupAnchor: [1, -34],
-        shadowSize: [41, 41]
-      }));
+    // --- 1. KHẨN CẤP / CHỜ XỬ LÝ: MÀU ĐỎ + NHẤP NHÁY ---
+    if (s === 'chờ xử lý' || s === 'pending') {
+        return createHtmlIcon('#ef4444', true); // Red-500 + Pulse
     }
-    
-    return iconCache.get(colorKey)!;
+
+    // --- 2. ĐÃ PHÂN CÔNG: MÀU CAM ---
+    if (s === 'đã phân công' || s === 'assigned' || s === 'processing') {
+        return createHtmlIcon('#f59e0b'); // Amber-500
+    }
+
+    // --- 3. ĐANG THỰC HIỆN: MÀU XANH DƯƠNG ---
+    if (s === 'đang thực hiện' || s === 'in_progress') {
+        return createHtmlIcon('#3b82f6'); // Blue-500
+    }
+
+    // --- 4. HOÀN THÀNH: MÀU XANH LÁ ---
+    if (s === 'hoàn thành' || s === 'finished' || s === 'completed') {
+        return createHtmlIcon('#22c55e'); // Green-500
+    }
+
+    // --- 5. AN TOÀN: MÀU TÍM ---
+    if (s === 'an toàn' || s === 'safe') {
+        return createHtmlIcon('#8b5cf6'); // Violet-500
+    }
+
+    // --- MẶC ĐỊNH: MÀU XÁM ---
+    return createHtmlIcon('#6b7280'); // Gray-500
   };
 
   return { getIcon };

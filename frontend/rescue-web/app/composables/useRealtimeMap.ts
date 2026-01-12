@@ -1,6 +1,5 @@
-// composables/useRealtimeMap.ts
 import { ref, shallowRef, onMounted, onBeforeUnmount, watch } from 'vue';
-import type { MapPoint, MapBounds, BackendPoint } from '~/types/map';
+import type { MapBounds, BackendPoint } from '~/types/map';
 
 export const useRealtimeMap = () => {
   const config = useRuntimeConfig();
@@ -13,10 +12,10 @@ export const useRealtimeMap = () => {
   let socket: WebSocket | null = null;
   let reconnectTimer: NodeJS.Timeout | null = null;
 
-  // ... (giữ nguyên hàm fetchPoints) ...
+  // 1. Fetch điểm từ API
   const fetchPoints = async (bounds?: MapBounds) => {
     try {
-      const res = await apiFetch<BackendPoint[]>('api/requests/map-points', {
+      const res = await apiFetch<BackendPoint[]>('/requests/map-points', { 
         params: {
           min_lat: bounds?.min_lat ?? 8.0,
           max_lat: bounds?.max_lat ?? 12.0,
@@ -25,16 +24,20 @@ export const useRealtimeMap = () => {
           zoom: bounds?.zoom ?? 10
         }
       });
-      if (Array.isArray(res)) points.value = res;
+      if (Array.isArray(res)) {
+        points.value = res;
+      }
     } catch (error) {
       console.error('Fetch error:', error);
     }
   };
 
-  // --- LOGIC WEBSOCKET - DYNAMIC BASED ON ENVIRONMENT ---
+  // 2. Kết nối WebSocket (Đã fix logic Port)
   const connectWebSocket = () => {
+    if (typeof window === 'undefined') return; // Chỉ chạy ở Client
+
     if (!tokenCookie.value) {
-      console.warn('⚠️ WS: Missing Token');
+      console.warn('⚠️ WS: Chưa có Token');
       return;
     }
 
@@ -43,32 +46,26 @@ export const useRealtimeMap = () => {
     socketStatus.value = 'CONNECTING';
 
     try {
-      let wsUrl: string;
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const host = window.location.hostname; 
+      let port = '';
 
-      if (typeof window === 'undefined') return; // SSR guard
-
-      const wsBase = config.public.wsBase as string;
-      const env = config.public.env as string;
-
-      // 🔧 DETERMINE WEBSOCKET URL
-      if (wsBase && (wsBase.startsWith('ws://') || wsBase.startsWith('wss://'))) {
-        // Production: Use config URL
-        wsUrl = `${wsBase}/ws/map/?token=${tokenCookie.value}`;
-      } else {
-        // Development: Use current location or default
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const host = window.location.host; // e.g., localhost:3000 or example.com
-        
-        // ⚠️ IMPORTANT: WebSocket must point to backend port directly
-        // For development, override to backend port (8000)
-        const backendHost = env === 'development' 
-          ? '127.0.0.1:8000' 
-          : window.location.host;
-          
-        wsUrl = `${protocol}//${backendHost}/ws/map/?token=${tokenCookie.value}`;
+      // --- LOGIC QUAN TRỌNG ---
+      // 1. Nếu chạy Localhost -> Thêm port :8000
+      if (host === 'localhost' || host === '127.0.0.1') {
+         port = ':8000'; 
+      } 
+      // 2. Nếu chạy VPS (IP thật) -> Tạm thời cũng thêm :8000 (trừ khi bạn đã cấu hình Nginx proxy /ws/)
+      // Nếu bạn đã cấu hình Nginx thì xóa dòng else if này đi
+      else {
+         port = ':8000'; 
       }
 
-      console.log('🔗 WS Target:', wsUrl);
+      // Endpoint: /ws/rescue/ (Khớp với routing.py của Backend)
+      const wsUrl = `${protocol}//${host}${port}/ws/map/?token=${tokenCookie.value}`;
+
+      console.log('🔗 Connecting WS:', wsUrl);
+
       socket = new WebSocket(wsUrl);
 
       socket.onopen = () => {
@@ -81,13 +78,15 @@ export const useRealtimeMap = () => {
         console.warn(`🔴 WS Closed: ${event.code}`);
         socketStatus.value = 'CLOSED';
         socket = null;
-        if (event.code !== 1000) reconnectTimer = setTimeout(connectWebSocket, 5000);
+        if (event.code !== 1000) {
+            reconnectTimer = setTimeout(connectWebSocket, 3000);
+        }
       };
 
       socket.onmessage = (event) => {
         try {
-          const data = JSON.parse(event.data);
-          handleSocketMessage(data);
+          const payload = JSON.parse(event.data);
+          handleSocketMessage(payload);
         } catch (e) { console.error('WS JSON Error', e); }
       };
 
@@ -97,17 +96,35 @@ export const useRealtimeMap = () => {
       };
 
     } catch (err) {
-      console.error('🔥 WS Connection Failed:', err);
+      console.error('🔥 WS Error:', err);
       socketStatus.value = 'CLOSED';
     }
   };
 
-  // ... (Giữ nguyên handleSocketMessage, watch, onMounted, onBeforeUnmount) ...
-  const handleSocketMessage = (data: any) => { /* ...code cũ... */ };
+  // 3. Xử lý tin nhắn đến
+  const handleSocketMessage = (payload: any) => {
+    const eventName = payload.data?.event;
+    const data = payload.data?.data;
+
+    if (eventName === 'NEW_REQUEST') {
+        // Hiện thông báo (Alert)
+        if (typeof window !== 'undefined') {
+            alert(`🆘 CÓ YÊU CẦU MỚI!\nTại: ${data.address}\nSĐT: ${data.contact_phone}`);
+        }
+        // Load lại map
+        fetchPoints();
+    }
+  };
   
-  watch(tokenCookie, (newToken) => { if(newToken) { socket?.close(); connectWebSocket(); } });
+  // 4. Lifecycle
+  watch(tokenCookie, (newToken) => { 
+      if (!newToken) socket?.close(1000);
+      else connectWebSocket();
+  });
   
-  onMounted(() => { if (tokenCookie.value) connectWebSocket(); });
+  onMounted(() => { 
+      if (tokenCookie.value) connectWebSocket(); 
+  });
   
   onBeforeUnmount(() => { 
     if (reconnectTimer) clearTimeout(reconnectTimer);
