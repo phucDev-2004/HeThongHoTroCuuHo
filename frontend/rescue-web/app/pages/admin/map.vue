@@ -8,8 +8,6 @@ import AdminMapComponent from '~/components/MapWidget.vue';
 import type { MapBounds } from '~/types/map';
 import { useRescueStore } from '~/stores/rescueStore';
 
-import NotificationBell from '~/components/NotificationBell.vue';
-
 definePageMeta({ layout: 'admin', hideHeader: true });
 
 const rescueStore = useRescueStore();
