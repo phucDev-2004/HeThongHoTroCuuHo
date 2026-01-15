@@ -15,7 +15,7 @@ export const useRealtimeMap = () => {
   // 1. Fetch điểm từ API
   const fetchPoints = async (bounds?: MapBounds) => {
     try {
-      const res = await apiFetch<BackendPoint[]>('/requests/map-points', { 
+      const res = await apiFetch<BackendPoint[]>('/api/requests/map-points', { 
         params: {
           min_lat: bounds?.min_lat ?? 8.0,
           max_lat: bounds?.max_lat ?? 12.0,
@@ -58,7 +58,7 @@ export const useRealtimeMap = () => {
       // 2. Nếu chạy VPS (IP thật) -> Tạm thời cũng thêm :8000 (trừ khi bạn đã cấu hình Nginx proxy /ws/)
       // Nếu bạn đã cấu hình Nginx thì xóa dòng else if này đi
       else {
-         port = ':8000'; 
+        //  port = ':8000'; 
       }
 
       // Endpoint: /ws/rescue/ (Khớp với routing.py của Backend)

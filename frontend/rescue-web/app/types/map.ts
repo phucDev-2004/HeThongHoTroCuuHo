@@ -25,8 +25,7 @@ export interface MapPoint {
 export interface BackendPoint {
   latitude: number | string;
   longitude: number | string;
-  total: number; // Bắt buộc phải có total > 1
-  // Cluster không có id, code, status...
+  total: number; 
 }
 
 // 3. Type chung cho mảng props (Quan trọng)
