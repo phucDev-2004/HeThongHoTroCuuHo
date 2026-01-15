@@ -173,12 +173,21 @@ JWT_ALGORITHM: Final[str] = os.getenv('JWT_ALGORITHM', 'HS256')
 ACCESS_EXPIRE_MINUTES: Final[int] = int(os.getenv('ACCESS_EXPIRE_MINUTES', '60'))
 REFRESH_EXP_DAYS: Final[int] = int(os.getenv('REFRESH_EXPIRE_DAYS', '7'))
 
-# Cấu hình Channel Layer (Dùng bộ nhớ RAM để test cho nhanh)
+# settings.py
+
+# 1. Cấu hình cho Channels (WebSocket)
 CHANNEL_LAYERS = {
     "default": {
-        "BACKEND": "channels.layers.InMemoryChannelLayer"
-    }
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [("127.0.0.1", 6379)],
+        },
+    },
 }
+
+# 2. Cấu hình cho Celery (Background Task)
+CELERY_BROKER_URL = 'redis://127.0.0.1:6379/0'
+CELERY_RESULT_BACKEND = 'redis://127.0.0.1:6379/0'
 
 
 # Cho phép tất cả các nguồn (Dùng cho Development cho nhanh)

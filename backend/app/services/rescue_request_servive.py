@@ -8,8 +8,7 @@ from django.utils import timezone
 from ninja import UploadedFile
 import json
 
-from channels.layers import get_channel_layer
-from asgiref.sync import async_to_sync
+from .notification_service import NotificationService
 
 def dictfetchall(cursor):
     """
@@ -86,22 +85,13 @@ class RescueRequestService():
                 "people_summary": RescueRequestService._format_people_summary(payload),
             }
 
-            # Định nghĩa bắn tin
-            def send_socket_notification():
-                channel_layer = get_channel_layer()
-                async_to_sync(channel_layer.group_send)(
-                    "rescue_admin",  # Gửi cho Admin
-                    {
-                        "type": "send_update", # Hàm xử lý bên Consumer
-                        "data": {
-                            "event": "NEW_REQUEST",
-                            "data": socket_data
-                        }
-                    }
-                )
-
             # Chỉ bắn Socket khi Transaction thành công để tránh trường hợp Socket nhận được tin mà DB chưa lưu xong
-            transaction.on_commit(send_socket_notification)
+            NotificationService.send_async(
+                groups=["rescue_admin"],
+                event="NEW_REQUEST",
+                data=socket_data,
+            )
+
         return {
             "id": request_id,
             "code": code,
