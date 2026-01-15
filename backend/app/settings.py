@@ -176,18 +176,22 @@ REFRESH_EXP_DAYS: Final[int] = int(os.getenv('REFRESH_EXPIRE_DAYS', '7'))
 # settings.py
 
 # 1. Cấu hình cho Channels (WebSocket)
+REDIS_HOST = os.environ.get('REDIS_HOST', '127.0.0.1')
+REDIS_PORT = os.environ.get('REDIS_PORT', '6379')
+
+# Cấu hình Channels (Socket)
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
-            "hosts": [("127.0.0.1", 6379)],
+            "hosts": [(REDIS_HOST, int(REDIS_PORT))], # <--- Phải dùng biến này
         },
     },
 }
 
-# 2. Cấu hình cho Celery (Background Task)
-CELERY_BROKER_URL = 'redis://127.0.0.1:6379/0'
-CELERY_RESULT_BACKEND = 'redis://127.0.0.1:6379/0'
+# Cấu hình Celery
+CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', f'redis://{REDIS_HOST}:{REDIS_PORT}/0')
+CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND', f'redis://{REDIS_HOST}:{REDIS_PORT}/0')
 
 
 # Cho phép tất cả các nguồn (Dùng cho Development cho nhanh)

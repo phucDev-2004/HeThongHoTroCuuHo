@@ -12,7 +12,7 @@ def broadcast_event(target_groups: list, event_name: str, payload_data: dict):
 
     channel_layer = get_channel_layer()
 
-    messege = {
+    message = {
         "type": "send_update",
         "data":{
             "event": event_name,
@@ -26,7 +26,7 @@ def broadcast_event(target_groups: list, event_name: str, payload_data: dict):
             if group:
                 async_to_sync(channel_layer.group_send)(
                     group,
-                    messege
+                    message
                 )
                 count += 1
         return f"Broadcasted '{event_name}' to {count} groups."
