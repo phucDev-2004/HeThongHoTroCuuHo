@@ -1,16 +1,21 @@
 <script setup lang="ts">
 import { ref, onMounted, nextTick } from 'vue';
 import { LocationFilled } from '@element-plus/icons-vue';
+import { storeToRefs } from 'pinia';
 
-// 1. IMPORT ĐÚNG COMPONENT (Đã bỏ comment)
 import AdminMapComponent from '~/components/MapWidget.vue'; 
-import { useRealtimeMap } from '~/composables/useRealtimeMap';
+// import { useRealtimeMap } from '~/composables/useRealtimeMap';
 import type { MapBounds } from '~/types/map';
+import { useRescueStore } from '~/stores/rescueStore';
+
+import NotificationBell from '~/components/NotificationBell.vue';
 
 definePageMeta({ layout: 'admin', hideHeader: true });
 
+const rescueStore = useRescueStore();
+
 // 2. Sử dụng Composable
-const { points, socketStatus, fetchPoints } = useRealtimeMap();
+const { points, socketStatus } = storeToRefs(rescueStore);
 
 // 3. Geolocation
 const userLocation = ref<[number, number]>([0, 0]);
@@ -29,12 +34,13 @@ const getUserLocation = () => {
 const handleLocationClick = () => getUserLocation();
 
 const onMapBoundsChange = (bounds: MapBounds) => {
-  fetchPoints(bounds);
+  rescueStore.fetchPoints(bounds);
 };
 
 onMounted(async () => {
   await nextTick();
   getUserLocation();
+  rescueStore.connectWebSocket();
 });
 </script>
 

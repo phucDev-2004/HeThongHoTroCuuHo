@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { useRouter } from 'vue-router'; // Import router
 import { 
   WarningFilled, UserFilled, Finished, ArrowRight, Timer, View,
   Bell, ChatDotRound, CircleCheckFilled, InfoFilled, WarnTriangleFilled,
@@ -10,17 +11,17 @@ import { useRescueService } from '~/composables/useRescueService';
 
 definePageMeta({ layout: 'admin' });
 
-// --- 1. CONFIG & SERVICE ---
+// --- 1. CONFIG ---
+const router = useRouter();
 const { getAll, getDashboardStats } = useRescueService();
 const isLoading = ref(false);
 
 interface DashboardStatResponse {
-    pending_count: number;
-    ready_teams_count: number;
-    processed_today_count: number;
+  pending_count: number;
+  ready_teams_count: number;
+  processed_today_count: number;
 }
 
-// Interface cho dữ liệu hiển thị trên UI
 interface IncidentUI {
   id: string;
   code: string;
@@ -33,8 +34,6 @@ interface IncidentUI {
 
 // --- 2. STATE ---
 const recentIncidents = ref<IncidentUI[]>([]);
-
-// --- 3. DATA (SỬA Ở ĐÂY: Chuyển thành ref để cập nhật được) ---
 const statData = ref([
   { title: 'Sự cố đang chờ', value: 0, unit: 'vụ', icon: WarningFilled, color: 'red' as const, change: '...', percent: 0 },
   { title: 'Lực lượng sẵn sàng', value: 0, unit: 'đơn vị', icon: UserFilled, color: 'green' as const, change: '...', percent: 0 },
@@ -49,13 +48,18 @@ const activityLogs = [
   { id: 5, type: 'system', message: 'Hệ thống tự động sao lưu dữ liệu', time: '30 phút trước', icon: WarnTriangleFilled, color: 'text-slate-400 bg-slate-500/10 border-slate-500/20' },
 ];
 
+// --- 3. ACTIONS ---
+const navigateToDetail = (id: string) => {
+  // Chuyển hướng sang trang chi tiết (cập nhật đường dẫn đúng với dự án của bạn)
+  router.push(`/admin/incidents`);
+};
+
 // --- 4. HELPERS ---
 const timeAgo = (dateString: string | undefined) => {
   if (!dateString) return 'N/A';
   const now = new Date();
   const past = new Date(dateString);
   const diffInSeconds = Math.floor((now.getTime() - past.getTime()) / 1000);
-
   if (diffInSeconds < 60) return 'Vừa xong';
   if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} phút trước`;
   if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} giờ trước`;
@@ -67,75 +71,51 @@ const getStatusColor = (status: string) => {
         case 'Chờ xử lý': return 'text-red-400 bg-red-400/10 border-red-400/20';
         case 'Đang thực hiện': return 'text-blue-400 bg-blue-400/10 border-blue-400/20';
         case 'Hoàn thành': return 'text-green-400 bg-green-400/10 border-green-400/20';
-        case 'Đã phân công': return 'text-slate-400 bg-slate-400/10 border-slate-400/20';
         default: return 'text-slate-400 bg-slate-400/10 border-slate-400/20';
     }
 };
 
 const getStatusText = (status: string) => {
-    const map: Record<string, string> = { 
-      'PENDING': 'Đang chờ', 
-      'PROCESSING': 'Đang xử lý', 
-      'DONE': 'Hoàn thành', 
-      'CANCELLED': 'Đã hủy' 
-    };
+    const map: Record<string, string> = { 'PENDING': 'Đang chờ', 'PROCESSING': 'Đang xử lý', 'DONE': 'Hoàn thành', 'CANCELLED': 'Đã hủy' };
     return map[status] || status;
 }
 
 // --- 5. DATA FETCHING ---
 const fetchRecentIncidents = async () => {
-  // isLoading chỉ dùng cho loading table bên dưới, không block 3 cái card
   isLoading.value = true;
   try {
-    const response = await getAll({page: 1, page_size: 10 }); 
+    const response = await getAll({page: 1, page_size: 20 });
     const rawData = Array.isArray(response) ? response : (response as any).items || [];
-
-    recentIncidents.value = rawData.slice(0, 10).map((item: any) => ({
+    recentIncidents.value = rawData.map((item: any) => ({
       id: item.id,
       code: item.code,
       name: item.name || 'Không rõ',
-      phone: item.contact_phone || '', // Check lại xem API trả về contact_phone hay reporter_phone
+      phone: item.contact_phone || '---',
       address: item.address || 'Chưa có định vị',
       status: item.status || 'PENDING',
       time: timeAgo(item.created_at)
     }));
-
-  } catch (error) {
-    console.error('Lỗi khi tải danh sách sự cố:', error);
-  } finally {
-    isLoading.value = false;
-  }
+  } catch (error) { console.error(error); } finally { isLoading.value = false; }
 };
 
-// Hàm lấy thống kê
 const fetchStats = async () => {
   try {
     const data: DashboardStatResponse = await getDashboardStats();
-    
     if (data) {
-        // Thêm dấu ! sau chỉ số mảng [0]!
-        // Ý nghĩa: "Chắc chắn phần tử thứ 0 có tồn tại, đừng lo"
-        statData.value[0]!.value = data.pending_count;
-        statData.value[1]!.value = data.ready_teams_count;
-        statData.value[2]!.value = data.processed_today_count;
+        statData.value[0]!.value = data.pending_count ?? 0;
+        statData.value[1]!.value = data.ready_teams_count ?? 0;
+        statData.value[2]!.value = data.processed_today_count ?? 0;
     }
-  } catch (error) {
-    console.error("Lỗi khi tải thống kê:", error);
-  }
+  } catch (error) { console.error(error); }
 }
 
-// Gọi API khi component được mount
-onMounted(() => {
-  // Gọi cả 2 hàm
-  fetchRecentIncidents();
-  fetchStats(); 
-});
+onMounted(() => { fetchRecentIncidents(); fetchStats(); });
 </script>
+
 <template>
   <div class="p-0">
     <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
       <StatCard v-for="(stat, idx) in statData" :key="idx" v-bind="stat" />
-
       <div class="bg-slate-800 p-4 rounded-xl border border-slate-700 shadow-lg flex flex-col justify-between">
         <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Truy Cập Nhanh</h3>
         <NuxtLink to="/admin/incidents" class="flex items-center justify-between px-3 py-2 bg-slate-700/30 rounded-lg hover:bg-slate-700 transition-colors group">
@@ -152,8 +132,9 @@ onMounted(() => {
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
       
       <div class="lg:col-span-2 flex flex-col">
-        <div class="bg-slate-800 rounded-xl border border-slate-700 shadow-lg h-full overflow-hidden flex flex-col">
-          <div class="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-800/50">
+        <div class="bg-slate-800 rounded-xl border border-slate-700 shadow-lg h-[630px] flex flex-col overflow-hidden">
+          
+          <div class="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-800/50 flex-shrink-0">
              <h3 class="text-sm font-semibold text-white uppercase flex items-center gap-2">
                <el-icon class="text-red-500"><Timer /></el-icon> Tiếp nhận gần đây
              </h3>
@@ -162,10 +143,10 @@ onMounted(() => {
              </NuxtLink>
           </div>
           
-          <div class="overflow-x-auto flex-1 relative min-h-[300px]">
+          <div class="flex-1 overflow-y-auto scrollbar-thin relative">
             <table class="w-full text-left border-collapse">
-                <thead>
-                    <tr class="text-slate-400 text-xs border-b border-slate-700 bg-slate-900/30">
+                <thead class="sticky top-0 z-10">
+                    <tr class="text-slate-400 text-xs border-b border-slate-700 bg-slate-900 shadow-md">
                         <th class="p-4 font-medium uppercase whitespace-nowrap">Mã SC</th>
                         <th class="p-4 font-medium uppercase whitespace-nowrap">Thông tin báo tin</th>
                         <th class="p-4 font-medium uppercase whitespace-nowrap">Trạng thái</th>
@@ -192,26 +173,31 @@ onMounted(() => {
                         </td>
                     </tr>
 
-                    <tr v-else v-for="item in recentIncidents" :key="item.id" class="hover:bg-slate-700/30 transition-colors group">
-                        <td class="p-4 font-mono text-blue-400 font-semibold group-hover:text-blue-300 whitespace-nowrap">
-                            #{{ item.code }}
+                    <tr v-else 
+                        v-for="item in recentIncidents" 
+                        :key="item.id" 
+                        @click="navigateToDetail(item.id)"
+                        class="hover:bg-slate-700/50 transition-colors group cursor-pointer border-l-4 border-transparent hover:border-blue-500"
+                    >
+                        <td class="p-4 align-top">
+                            <span class="font-mono text-blue-400 font-bold group-hover:text-blue-300">#{{ item.code }}</span>
                         </td>
-                        <td class="p-4">
-                            <div class="text-slate-200 font-medium">{{ item.name }}</div>
-                            <div class="text-xs text-slate-500 truncate max-w-[200px]" :title="item.address">
+                        <td class="p-4 align-top">
+                            <div class="text-white font-semibold text-sm">{{ item.name }}</div>
+                            <div class="text-xs text-slate-400 mt-0.5 line-clamp-2" :title="item.address">
                                 {{ item.address }}
                             </div>
-                            <div v-if="item.phone" class="text-[10px] text-slate-600 font-mono mt-0.5">
-                                {{ item.phone }}
+                            <div class="text-[11px] text-emerald-400 font-mono mt-1 font-medium flex items-center gap-1">
+                                <span>📞</span> {{ item.phone }}
                             </div>
                         </td>
-                        <td class="p-4">
-                            <span class="px-2.5 py-1 rounded-md text-[10px] font-bold border uppercase tracking-wider whitespace-nowrap" 
+                        <td class="p-4 align-top">
+                            <span class="px-2.5 py-1 rounded-md text-[10px] font-bold border uppercase tracking-wider whitespace-nowrap inline-block" 
                                   :class="getStatusColor(item.status)">
                                 {{ getStatusText(item.status) }}
                             </span>
                         </td>
-                        <td class="p-4 text-right text-slate-400 text-xs font-mono whitespace-nowrap">
+                        <td class="p-4 text-right align-top text-slate-300 text-xs font-mono whitespace-nowrap">
                             {{ item.time }}
                         </td>
                     </tr>
@@ -238,11 +224,9 @@ onMounted(() => {
           <div class="flex-1 overflow-y-auto p-4 scrollbar-thin">
              <div class="relative border-l border-slate-700 ml-2 space-y-6 pb-2">
                 <div v-for="log in activityLogs" :key="log.id" class="ml-6 relative group">
-                   <span class="absolute -left-[35px] flex h-8 w-8 items-center justify-center rounded-full border ring-4 ring-slate-800 transition-transform group-hover:scale-110"
-                         :class="log.color">
+                   <span class="absolute -left-[35px] flex h-8 w-8 items-center justify-center rounded-full border ring-4 ring-slate-800 transition-transform group-hover:scale-110" :class="log.color">
                       <el-icon :size="14"><component :is="log.icon" /></el-icon>
                    </span>
-
                    <div class="flex flex-col bg-slate-700/20 p-2 rounded-lg hover:bg-slate-700/40 transition-colors border border-transparent hover:border-slate-600">
                       <span class="text-xs font-medium text-slate-200 leading-snug">{{ log.message }}</span>
                       <span class="text-[10px] text-slate-500 mt-1 font-mono flex items-center gap-1">
@@ -295,18 +279,9 @@ onMounted(() => {
 </template>
 
 <style scoped>
-/* CSS cho thanh cuộn nhỏ gọn */
-.scrollbar-thin::-webkit-scrollbar {
-  width: 4px;
-}
-.scrollbar-thin::-webkit-scrollbar-track {
-  background: transparent;
-}
-.scrollbar-thin::-webkit-scrollbar-thumb {
-  background-color: #475569;
-  border-radius: 20px;
-}
-.scrollbar-thin::-webkit-scrollbar-thumb:hover {
-    background-color: #64748b;
-}
+/* Scrollbar */
+.scrollbar-thin::-webkit-scrollbar { width: 4px; }
+.scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+.scrollbar-thin::-webkit-scrollbar-thumb { background-color: #475569; border-radius: 20px; }
+.scrollbar-thin::-webkit-scrollbar-thumb:hover { background-color: #64748b; }
 </style>

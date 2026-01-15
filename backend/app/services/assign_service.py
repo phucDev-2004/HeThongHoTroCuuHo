@@ -1,35 +1,18 @@
+import json
+
 from django.db import transaction, connection
 from django.http import Http404
 from django.core.exceptions import ValidationError, PermissionDenied
 from django.db.models.expressions import RawSQL
 from django.utils import timezone
+
 from ..models import RescueRequest, RescueTeam, RescueAssignments
 from ..enum.rescue_status import TeamStatus, TaskStatus, RescueStatus, RESCUE_STATUS
 from ..enum.role_enum import RoleCode
-import json
+from ..services.notification_service import NotificationService
 
-
-from asgiref.sync import async_to_sync
-from channels.layers import get_channel_layer
 
 class AssignService:
-
-    @staticmethod
-    def _push_update(groups: list, event_name: str, payload_data: dict):
-        channel_layer = get_channel_layer()
-        message = {
-            "type": "send_update",
-            "data": {
-                "event": event_name,
-                "data": payload_data
-            }
-        }
-        try:
-            for group in groups:
-                if group: 
-                    async_to_sync(channel_layer.group_send)(group, message)
-        except Exception as e:
-            print(f"Socket Error: {e}")
 
     @staticmethod
     def _build_permission(user):
@@ -72,18 +55,24 @@ class AssignService:
 
             # --- Socket Notification ---
             payload = {
-                "task_id": task.id,
-                "request_id": request.id,
-                "team_id": team.id,
+                "task_id": str(task.id),
+                "request_id": str(request.id),
+                "team_id": str(team.id),
                 "status": "ASSIGNED",
                 "msg": f"Nhiệm vụ mới tại: {request.address}",
+                "time": str(timezone.now())
             }
             
             target_groups = ["rescue_admin", f"rescue_team_{team.id}"]
             if request.account_id:
                 target_groups.append(f"user_{request.account_id}")
 
-            AssignService._push_update(groups=target_groups, event_name="NEW_TASK", payload_data=payload)
+            NotificationService.send_async(
+                groups=target_groups, 
+                event="NEW_TASK", 
+                data=payload
+            )
+
             return task
         
         
@@ -242,16 +231,22 @@ class AssignService:
             rescue_req.save(update_fields=['status'])
             
             payload = {
-                "task_id": task.id, 
+                "task_id": str(task.id), 
                 "status": "IN_PROGRESS",
-                "msg": "Đội cứu hộ đang di chuyển"
+                "msg": "Đội cứu hộ đang di chuyển",
+                "team_id": str(task.rescue_team.id)
             }
             
             target_groups = ["rescue_admin", f"rescue_team_{task.rescue_team.id}"]
             if rescue_req.account_id:
                 target_groups.append(f"user_{rescue_req.account_id}")
                 
-            AssignService._push_update(groups=target_groups, event_name="TASK_UPDATE", payload_data=payload)
+            NotificationService.send_async(
+                groups=target_groups, 
+                event="TASK_UPDATE", 
+                data=payload
+            )
+
             return task
         
     @staticmethod
@@ -264,16 +259,21 @@ class AssignService:
             task.save(update_fields=['status'])
             
             payload = {
-                "task_id": task.id, 
+                "task_id": str(task.id), 
                 "status": "ARRIVED", 
-                "msg": "Đội cứu hộ đã đến vị trí!"
+                "msg": "Đội cứu hộ đã đến vị trí cứu hộ!",
+                "team_id": str(task.rescue_team.id)
             }
 
             target_groups = ["rescue_admin", f"rescue_team_{task.rescue_team.id}"]
             if task.rescue_request.account_id:
                 target_groups.append(f"user_{task.rescue_request.account_id}")
 
-            AssignService._push_update(groups=target_groups, event_name="TASK_UPDATE", payload_data=payload)
+            NotificationService.send_async(
+                groups=target_groups, 
+                event="TASK_UPDATE", 
+                data=payload
+            )
 
             return task
     
@@ -308,16 +308,21 @@ class AssignService:
             rescue_req.save()
 
             payload = {
-                "task_id": task.id, 
-                "request_id": rescue_req.id,
+                "task_id": str(task.id), 
+                "request_id": str(rescue_req.id),
                 "status": "COMPLETED",
-                "msg": "Nhiệm vụ hoàn thành"
+                "msg": "Nhiệm vụ hoàn thành",
+                "team_id": str(team.id)
             }
 
             target_groups = ["rescue_admin", f"rescue_team_{team.id}"]
             if rescue_req.account_id:
                 target_groups.append(f"user_{rescue_req.account_id}")
 
-            AssignService._push_update(groups=target_groups, event_name="TASK_COMPLETED", payload_data=payload)
+            NotificationService.send_async(
+                groups=target_groups, 
+                event="TASK_COMPLETED", 
+                data=payload
+            )
 
             return task

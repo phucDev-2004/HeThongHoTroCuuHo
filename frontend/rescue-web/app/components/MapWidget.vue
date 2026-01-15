@@ -99,11 +99,13 @@ const updateMarkers = () => {
   const map = mapInstance.value;
   if (!layer || !map) return;
 
+  // if (props.points.length > 0) {
+  //     console.log("👉 Điểm mới nhất (đầu mảng):", props.points[0]);
+  // }
+
   const currentDataIds = new Set<string>();
 
   props.points.forEach((rawPoint) => {
-    // 🔥 SỬA LOGIC: Chỉ coi là Cluster nếu total > 1
-    // Nếu total == 1, ta coi nó là Point để vẽ Pin (dù có thể thiếu data chi tiết)
     const isCluster = 'total' in rawPoint && (rawPoint.total as number) > 1;
 
     let uniqueId = '';
@@ -117,7 +119,7 @@ const updateMarkers = () => {
     }
 
     currentDataIds.add(uniqueId);
-    if (activeMarkers.has(uniqueId)) return; // Đã vẽ rồi thì thôi
+    if (activeMarkers.has(uniqueId)) return;
 
     const latlng = parseLatLng(rawPoint);
     if (!latlng) return;
@@ -187,7 +189,16 @@ const onMapReady = (mapObj: L.Map) => {
   onMapMoveEnd();
 };
 
-watch(() => props.points, updateMarkers, { deep: true });
+watch(() => props.points, () => {
+
+  clearTimeout(debounceTimer);
+
+  debounceTimer = setTimeout(() => {
+    //  console.log("🎨 Map bắt đầu vẽ lại marker...");
+     updateMarkers();
+  }, 50);
+}, { deep: true });
+
 watch(userLatLng, (newLoc) => {
     if (mapInstance.value && isValidUserLocation.value) mapInstance.value.flyTo(newLoc, 14);
 });
