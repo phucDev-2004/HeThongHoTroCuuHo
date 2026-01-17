@@ -1,5 +1,5 @@
 from ..schemas.rescue_schema import RescueRequestSchema
-from ..models import RescueRequest, ConditionType, RescueMedia, Account
+from ..models import RescueRequest, ConditionType, RescueMedia, Notification
 from ..enum.rescue_status import RESCUE_STATUS, RescueStatus
 from typing import Optional, List, Dict, Any
 from django.db import transaction, connection
@@ -86,10 +86,12 @@ class RescueRequestService():
             }
 
             # Chỉ bắn Socket khi Transaction thành công để tránh trường hợp Socket nhận được tin mà DB chưa lưu xong
-            NotificationService.send_async(
+            NotificationService.send_notify(
                 groups=["rescue_admin"],
-                event="NEW_REQUEST",
-                data=socket_data,
+                event=Notification.NotificationType.NEW_REQUEST,
+                title="Yêu cầu cứu hộ mới",
+                message=f"Có yêu cầu cứu hộ mới từ {name} tại {address}",
+                data=socket_data
             )
 
         return {

@@ -1,21 +1,30 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { useRouter } from 'vue-router'; // Import router
+import { useRouter } from 'vue-router';
+import { storeToRefs } from 'pinia'; // Import để lấy reactive data từ store
 import { 
   WarningFilled, UserFilled, Finished, ArrowRight, Timer, View,
   Bell, ChatDotRound, CircleCheckFilled, InfoFilled, WarnTriangleFilled,
-  Loading
+  Loading, Van, LocationFilled // Thêm icon Xe và Vị trí
 } from '@element-plus/icons-vue';
 import StatCard from '~/components/StatCard.vue';
 import { useRescueService } from '~/composables/useRescueService';
+import { useRescueStore } from '~/stores/rescueStore'; // Import Store
+import type { AppNotification } from '~/types/notification'; // Import Type
 
 definePageMeta({ layout: 'admin' });
 
-// --- 1. CONFIG ---
+// --- 1. CONFIG & STORE ---
 const router = useRouter();
 const { getAll, getDashboardStats } = useRescueService();
+const rescueStore = useRescueStore(); // Khởi tạo Store
+
+// Lấy danh sách thông báo từ Store (Tự động cập nhật khi có Socket)
+const { notifications } = storeToRefs(rescueStore);
+
 const isLoading = ref(false);
 
+// ... (Giữ nguyên Interface & State của Incidents/Stats) ...
 interface DashboardStatResponse {
   pending_count: number;
   ready_teams_count: number;
@@ -32,7 +41,6 @@ interface IncidentUI {
   time: string; 
 }
 
-// --- 2. STATE ---
 const recentIncidents = ref<IncidentUI[]>([]);
 const statData = ref([
   { title: 'Sự cố đang chờ', value: 0, unit: 'vụ', icon: WarningFilled, color: 'red' as const, change: '...', percent: 0 },
@@ -40,21 +48,49 @@ const statData = ref([
   { title: 'Đã xử lý hôm nay', value: 0, unit: 'vụ', icon: Finished, color: 'blue' as const, change: '...', percent: 0 },
 ]);
 
-const activityLogs = [
-  { id: 1, type: 'alert', message: 'Nhận tín hiệu SOS mới từ Q.Bình Thạnh', time: 'Vừa xong', icon: Bell, color: 'text-red-500 bg-red-500/10 border-red-500/20' },
-  { id: 2, type: 'info', message: 'Xe chữa cháy đội 1 đang tiếp cận hiện trường', time: '2 phút trước', icon: InfoFilled, color: 'text-blue-400 bg-blue-500/10 border-blue-500/20' },
-  { id: 3, type: 'chat', message: 'Đội trưởng Nam: "Cần chi viện thêm y tế"', time: '5 phút trước', icon: ChatDotRound, color: 'text-orange-400 bg-orange-500/10 border-orange-500/20' },
-  { id: 4, type: 'success', message: 'Sự cố #SC-2302 đã xử lý hoàn tất', time: '15 phút trước', icon: CircleCheckFilled, color: 'text-green-500 bg-green-500/10 border-green-500/20' },
-  { id: 5, type: 'system', message: 'Hệ thống tự động sao lưu dữ liệu', time: '30 phút trước', icon: WarnTriangleFilled, color: 'text-slate-400 bg-slate-500/10 border-slate-500/20' },
-];
-
-// --- 3. ACTIONS ---
-const navigateToDetail = (id: string) => {
-  // Chuyển hướng sang trang chi tiết (cập nhật đường dẫn đúng với dự án của bạn)
-  router.push(`/admin/incidents`);
+// --- 2. HELPER UI CHO LIVE LOG (New) ---
+// Hàm này chọn màu và icon cho timeline dựa trên sự kiện
+const getLogStyle = (item: AppNotification) => {
+  // 1. SOS Mới -> Đỏ rực
+  if (item.type === 'new_request') {
+    return { 
+      icon: WarningFilled, 
+      color: 'text-red-500 bg-red-500/10 border-red-500/20 ring-red-900/20' 
+    };
+  }
+  // 2. Hoàn thành -> Xanh lá
+  if (item.type === 'complete') {
+    return { 
+      icon: CircleCheckFilled, 
+      color: 'text-green-500 bg-green-500/10 border-green-500/20 ring-green-900/20' 
+    };
+  }
+  // 3. Đang di chuyển -> Cam (Xe)
+  if (item.subStatus === 'IN_PROGRESS') {
+    return { 
+      icon: Van, 
+      color: 'text-orange-400 bg-orange-500/10 border-orange-500/20 ring-orange-900/20' 
+    };
+  }
+  // 4. Đã đến nơi -> Tím (Vị trí)
+  if (item.subStatus === 'ARRIVED') {
+    return { 
+      icon: LocationFilled, 
+      color: 'text-purple-400 bg-purple-500/10 border-purple-500/20 ring-purple-900/20' 
+    };
+  }
+  // Mặc định (Phân công, Tin hệ thống) -> Xanh dương
+  return { 
+    icon: InfoFilled, 
+    color: 'text-blue-400 bg-blue-500/10 border-blue-500/20 ring-blue-900/20' 
+  };
 };
 
-// --- 4. HELPERS ---
+const formatLogTime = (date: Date) => {
+    return new Date(date).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+};
+
+// ... (Giữ nguyên các helper cũ timeAgo, getStatusColor, getStatusText) ...
 const timeAgo = (dateString: string | undefined) => {
   if (!dateString) return 'N/A';
   const now = new Date();
@@ -80,7 +116,11 @@ const getStatusText = (status: string) => {
     return map[status] || status;
 }
 
-// --- 5. DATA FETCHING ---
+const navigateToDetail = (id: string) => {
+  router.push(`/admin/incidents`); // Cập nhật logic điều hướng cụ thể nếu cần
+};
+
+// --- DATA FETCHING ---
 const fetchRecentIncidents = async () => {
   isLoading.value = true;
   try {
@@ -109,7 +149,12 @@ const fetchStats = async () => {
   } catch (error) { console.error(error); }
 }
 
-onMounted(() => { fetchRecentIncidents(); fetchStats(); });
+onMounted(() => { 
+    fetchRecentIncidents(); 
+    fetchStats(); 
+    // Socket đã được kết nối ở Layout (admin.vue), nên ở đây không cần gọi connect nữa 
+    // Trừ khi trang này chạy độc lập không qua layout admin
+});
 </script>
 
 <template>
@@ -133,7 +178,6 @@ onMounted(() => { fetchRecentIncidents(); fetchStats(); });
       
       <div class="lg:col-span-2 flex flex-col">
         <div class="bg-slate-800 rounded-xl border border-slate-700 shadow-lg h-[630px] flex flex-col overflow-hidden">
-          
           <div class="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-800/50 flex-shrink-0">
              <h3 class="text-sm font-semibold text-white uppercase flex items-center gap-2">
                <el-icon class="text-red-500"><Timer /></el-icon> Tiếp nhận gần đây
@@ -154,7 +198,6 @@ onMounted(() => { fetchRecentIncidents(); fetchStats(); });
                     </tr>
                 </thead>
                 <tbody class="text-sm divide-y divide-slate-700/50">
-                    
                     <tr v-if="isLoading">
                         <td colspan="4" class="p-10 text-center">
                             <div class="flex flex-col items-center justify-center text-slate-500 gap-2">
@@ -163,7 +206,6 @@ onMounted(() => { fetchRecentIncidents(); fetchStats(); });
                             </div>
                         </td>
                     </tr>
-
                     <tr v-else-if="!isLoading && recentIncidents.length === 0">
                         <td colspan="4" class="p-10 text-center text-slate-500 text-xs">
                             <div class="flex flex-col items-center gap-2">
@@ -172,13 +214,7 @@ onMounted(() => { fetchRecentIncidents(); fetchStats(); });
                             </div>
                         </td>
                     </tr>
-
-                    <tr v-else 
-                        v-for="item in recentIncidents" 
-                        :key="item.id" 
-                        @click="navigateToDetail(item.id)"
-                        class="hover:bg-slate-700/50 transition-colors group cursor-pointer border-l-4 border-transparent hover:border-blue-500"
-                    >
+                    <tr v-else v-for="item in recentIncidents" :key="item.id" @click="navigateToDetail(item.id)" class="hover:bg-slate-700/50 transition-colors group cursor-pointer border-l-4 border-transparent hover:border-blue-500">
                         <td class="p-4 align-top">
                             <span class="font-mono text-blue-400 font-bold group-hover:text-blue-300">#{{ item.code }}</span>
                         </td>
@@ -192,8 +228,7 @@ onMounted(() => { fetchRecentIncidents(); fetchStats(); });
                             </div>
                         </td>
                         <td class="p-4 align-top">
-                            <span class="px-2.5 py-1 rounded-md text-[10px] font-bold border uppercase tracking-wider whitespace-nowrap inline-block" 
-                                  :class="getStatusColor(item.status)">
+                            <span class="px-2.5 py-1 rounded-md text-[10px] font-bold border uppercase tracking-wider whitespace-nowrap inline-block" :class="getStatusColor(item.status)">
                                 {{ getStatusText(item.status) }}
                             </span>
                         </td>
@@ -218,22 +253,34 @@ onMounted(() => { fetchRecentIncidents(); fetchStats(); });
                 </span>
                Hoạt động trực tuyến
              </h3>
-             <span class="text-[10px] text-slate-500 bg-slate-900 px-2 py-0.5 rounded border border-slate-700">Live Log</span>
+             <span class="text-[10px] text-slate-500 bg-slate-900 px-2 py-0.5 rounded border border-slate-700">Realtime</span>
           </div>
 
           <div class="flex-1 overflow-y-auto p-4 scrollbar-thin">
-             <div class="relative border-l border-slate-700 ml-2 space-y-6 pb-2">
-                <div v-for="log in activityLogs" :key="log.id" class="ml-6 relative group">
-                   <span class="absolute -left-[35px] flex h-8 w-8 items-center justify-center rounded-full border ring-4 ring-slate-800 transition-transform group-hover:scale-110" :class="log.color">
-                      <el-icon :size="14"><component :is="log.icon" /></el-icon>
+             <TransitionGroup name="list" tag="div" class="relative border-l border-slate-700 ml-2 space-y-6 pb-2">
+                
+                <div v-for="log in notifications" :key="log.id" class="ml-6 relative group">
+                   
+                   <span class="absolute -left-[35px] flex h-8 w-8 items-center justify-center rounded-full border ring-4 ring-slate-800 transition-transform group-hover:scale-110" 
+                         :class="getLogStyle(log).color">
+                      <el-icon :size="14"><component :is="getLogStyle(log).icon" /></el-icon>
                    </span>
+
                    <div class="flex flex-col bg-slate-700/20 p-2 rounded-lg hover:bg-slate-700/40 transition-colors border border-transparent hover:border-slate-600">
-                      <span class="text-xs font-medium text-slate-200 leading-snug">{{ log.message }}</span>
+                      <span class="text-xs font-bold text-slate-300 mb-0.5">{{ log.title }}</span>
+                      <span class="text-xs font-medium text-slate-400 leading-snug">{{ log.message }}</span>
+                      
                       <span class="text-[10px] text-slate-500 mt-1 font-mono flex items-center gap-1">
-                        <el-icon><Timer /></el-icon> {{ log.time }}
+                        <el-icon><Timer /></el-icon> {{ formatLogTime(log.time) }}
                       </span>
                    </div>
                 </div>
+
+             </TransitionGroup>
+             
+             <div v-if="notifications.length === 0" class="flex flex-col items-center justify-center h-full text-slate-500 text-xs gap-2 opacity-50">
+                 <el-icon :size="30"><ChatDotRound /></el-icon>
+                 Chưa có hoạt động mới
              </div>
           </div>
         </div>
@@ -284,4 +331,19 @@ onMounted(() => { fetchRecentIncidents(); fetchStats(); });
 .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
 .scrollbar-thin::-webkit-scrollbar-thumb { background-color: #475569; border-radius: 20px; }
 .scrollbar-thin::-webkit-scrollbar-thumb:hover { background-color: #64748b; }
+
+/* Animation cho List Log */
+.list-move, 
+.list-enter-active,
+.list-leave-active {
+  transition: all 0.5s ease;
+}
+.list-enter-from,
+.list-leave-to {
+  opacity: 0;
+  transform: translateX(-20px);
+}
+.list-leave-active {
+  position: absolute;
+}
 </style>

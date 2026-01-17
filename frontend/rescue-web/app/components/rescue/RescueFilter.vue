@@ -24,7 +24,7 @@ const emit = defineEmits(['submit', 'reset']); // Đổi tên event 'submit' ngh
             <el-option label="Đã phân công" value="ASSIGNED" />
             <el-option label="Đang thực hiện" value="IN_PROGRESS" />
             <el-option label="Hoàn Thành" value="COMPLETED" />
-            <el-option label="An Toàn" value="SAFE" />
+            <!-- <el-option label="An Toàn" value="SAFE" /> -->
         </el-select>
         
         <el-button @click="$emit('submit')" type="primary">Tìm</el-button>

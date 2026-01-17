@@ -9,7 +9,7 @@ from django.utils import timezone
 from ..models import RescueRequest, RescueTeam, RescueAssignments
 from ..enum.rescue_status import TeamStatus, TaskStatus, RescueStatus, RESCUE_STATUS
 from ..enum.role_enum import RoleCode
-from ..services.notification_service import NotificationService
+from ..services.notification_service import NotificationService, Notification
 
 
 class AssignService:
@@ -63,15 +63,31 @@ class AssignService:
                 "time": str(timezone.now())
             }
             
-            target_groups = ["rescue_admin", f"rescue_team_{team.id}"]
+            target_groups = [
+                "rescue_admin", 
+                f"rescue_team_{team.id}"
+            ]
+
             if request.account_id:
                 target_groups.append(f"user_{request.account_id}")
 
-            NotificationService.send_async(
-                groups=target_groups, 
-                event="NEW_TASK", 
-                data=payload
+
+            account_ids = []
+            if request.account_id:
+                account_ids.append(str(request.account_id))
+
+            if team.account_id:
+                account_ids.append(str(team.account_id))
+
+            NotificationService.send_notify(
+                groups=target_groups,
+                event=Notification.NotificationType.NEW_TASK,
+                title="Nhiệm vụ mới",
+                message= f"Đội {team.name} đã được phân công xử lý yêu cầu cứu hộ.",
+                data=payload,
+                account_ids=account_ids
             )
+
 
             return task
         
@@ -233,18 +249,25 @@ class AssignService:
             payload = {
                 "task_id": str(task.id), 
                 "status": "IN_PROGRESS",
-                "msg": "Đội cứu hộ đang di chuyển",
+                "msg": f"Đội {task.rescue_team.name} đã bắt đầu di chuyển tới điểm cứu hộ.",
                 "team_id": str(task.rescue_team.id)
             }
             
-            target_groups = ["rescue_admin", f"rescue_team_{task.rescue_team.id}"]
+            target_groups = ["rescue_admin"]
             if rescue_req.account_id:
                 target_groups.append(f"user_{rescue_req.account_id}")
                 
-            NotificationService.send_async(
-                groups=target_groups, 
-                event="TASK_UPDATE", 
-                data=payload
+            account_ids = []
+            if rescue_req.account_id:
+                account_ids.append(str(rescue_req.account_id))
+
+            NotificationService.send_notify(
+                groups=target_groups,
+                event=Notification.NotificationType.TASK_UPDATE,
+                title="Đội cứu hộ đang di chuyển",
+                message=f"Đội {task.rescue_team.name} đã bắt đầu di chuyển tới điểm cứu hộ.",
+                data=payload,
+                account_ids=account_ids
             )
 
             return task
@@ -257,22 +280,31 @@ class AssignService:
             
             task.status = TaskStatus.ARRIVED
             task.save(update_fields=['status'])
+
             
             payload = {
                 "task_id": str(task.id), 
                 "status": "ARRIVED", 
-                "msg": "Đội cứu hộ đã đến vị trí cứu hộ!",
+                "msg": f"Đội {task.rescue_team.name} đã có mặt tại vị trí cứu hộ.",
                 "team_id": str(task.rescue_team.id)
             }
 
-            target_groups = ["rescue_admin", f"rescue_team_{task.rescue_team.id}"]
+            target_groups = ["rescue_admin"]
             if task.rescue_request.account_id:
                 target_groups.append(f"user_{task.rescue_request.account_id}")
 
-            NotificationService.send_async(
+            account_ids = []
+
+            if task.rescue_request.account_id:
+                account_ids.append(str(task.rescue_request.account_id))
+
+            NotificationService.send_notify(
                 groups=target_groups, 
-                event="TASK_UPDATE", 
-                data=payload
+                event=Notification.NotificationType.TASK_UPDATE,
+                title="Đội cứu hộ đã đến hiện trường",
+                message=f"Đội {task.rescue_team.name} đã có mặt tại vị trí cứu hộ.",
+                data=payload,
+                account_ids=account_ids
             )
 
             return task
@@ -311,18 +343,25 @@ class AssignService:
                 "task_id": str(task.id), 
                 "request_id": str(rescue_req.id),
                 "status": "COMPLETED",
-                "msg": "Nhiệm vụ hoàn thành",
+                "msg": f"{task.rescue_team.name} đã hoàn thành nhiệm vụ",
                 "team_id": str(team.id)
             }
 
-            target_groups = ["rescue_admin", f"rescue_team_{team.id}"]
+            target_groups = ["rescue_admin"]
             if rescue_req.account_id:
                 target_groups.append(f"user_{rescue_req.account_id}")
 
-            NotificationService.send_async(
-                groups=target_groups, 
-                event="TASK_COMPLETED", 
-                data=payload
+            account_ids = []
+            if rescue_req.account_id:
+                account_ids.append(str(rescue_req.account_id))
+
+            NotificationService.send_notify(
+                groups=target_groups,
+                event=Notification.NotificationType.COMPLETE,
+                title="Nhiệm vụ hoàn thành",
+                message=  f"{task.rescue_team.name} đã hoàn thành nhiệm vụ",
+                data=payload,
+                account_ids=account_ids
             )
 
             return task

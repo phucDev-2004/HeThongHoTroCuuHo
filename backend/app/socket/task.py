@@ -1,3 +1,4 @@
+from django.utils import timezone
 from celery import shared_task
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
@@ -16,7 +17,8 @@ def broadcast_event(target_groups: list, event_name: str, payload_data: dict):
         "type": "send_update",
         "data":{
             "event": event_name,
-            "data": payload_data
+            "data": payload_data,
+            "timestamp": timezone.now().isoformat()
         } 
     }
 

@@ -1,12 +1,22 @@
 // types/notification.ts
+
+export type NotificationEventType = 
+  | 'new_request'  // Yêu cầu cứu hộ mới
+  | 'new_task'     // Phân công nhiệm vụ
+  | 'task_update'  // Cập nhật (Di chuyển / Đến nơi)
+  | 'complete';    // Hoàn thành
+
 export interface AppNotification {
   id: string;
-  type: 'NEW_TASK' | 'UPDATE' | 'COMPLETE';
+  type: NotificationEventType;
   title: string;
   message: string;
   time: Date;
-  isRead: boolean; // Đã xem hay chưa
-  relatedId: string; // ID của task để click vào thì nhảy tới
-  lat?: number; // Tọa độ để map bay tới
-  lng?: number;
+  isRead: boolean;
+  
+  relatedId: string;
+  subStatus?: 'IN_PROGRESS' | 'ARRIVED' | 'COMPLETED' | 'ASSIGNED'; 
+
+  latitude?: number;
+  longitude?: number;
 }
