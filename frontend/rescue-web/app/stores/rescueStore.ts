@@ -89,10 +89,17 @@ export const useRescueStore = defineStore('rescue', {
 
       this.socketStatus = 'CONNECTING';
 
-      // Tự động detect wss/ws và host
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const host = '127.0.0.1:8000'; // Hardcode hoặc dùng window.location.hostname
-      const wsUrl = `${protocol}//${host}/ws/map/?token=${token}`;
+      const config = useRuntimeConfig();
+      const apiBase = config.public.wsBase; 
+
+      // Tự động thay đổi http->ws, https->wss
+      // và bỏ phần đuôi dư thừa nếu có
+      const wsBase = apiBase
+          .replace('http://', 'ws://')
+          .replace('https://', 'wss://')
+          .replace(/\/$/, '');
+          
+      const wsUrl = `${wsBase}/ws/map/?token=${token}`;
 
       console.log('📡 WS Connecting:', wsUrl);
       this.socket = new WebSocket(wsUrl);
