@@ -4,6 +4,7 @@ from ..socket.task import broadcast_event
 
 from ..models import Notification, Account
 from ..enum.role_enum import RoleCode
+from ..exception import ResourceNotFound
 
 from django.utils.dateparse import parse_datetime
 
@@ -99,3 +100,32 @@ class NotificationService:
             "next_cursor": next_cursor,
             "has_more": has_more,
         }
+    
+    @staticmethod
+    def mark_all_notif(*, owner: Account):
+        qs = Notification.objects.filter(is_read=False)
+        if owner.role.code == RoleCode.ADMIN:
+            qs = qs.filter(account__isnull=True)
+        else:
+            qs = qs.filter(account_id=owner.id)
+
+        qs.update(is_read=True)
+    
+
+    @staticmethod
+    def mark_one_notif(*, owner: Account, notif_id: int):
+        qs = Notification.objects.filter(id=notif_id)
+        if owner.role.code == RoleCode.ADMIN:
+            qs = qs.filter(account__isnull=True)
+        else:
+            qs = qs.filter(account_id=owner.id)
+        
+        notif = qs.first()
+        if not notif:
+            raise ResourceNotFound("Không tìm thấy thông báo")
+
+        if not notif.is_read:
+            notif.is_read = True
+            notif.save(update_fields=["is_read"])
+
+        return notif

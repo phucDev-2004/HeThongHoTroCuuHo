@@ -9,6 +9,23 @@ router = Router(tags=["Notification"])
 
 auth_bearer = JWTBearer()
 
+@router.patch("/read-one/{id}", auth=auth_bearer)
+def mark_one_as_read(request, id: str):
+    owner = request.auth
+    NotificationService.mark_one_notif(owner=owner, notif_id=id)
+    return{
+        "success": True,
+        "message": "Đã đánh dấu đọc noti",
+    }
+
+@router.patch("/read-all", auth=auth_bearer)
+def mark_all_as_read(request):
+    owner = request.auth
+    NotificationService.mark_all_notif(owner=owner)
+    return{
+        "success": True,
+        "message": "Đã đánh dấu đọc tất cả noti",
+    }
 
 @router.get("", auth= auth_bearer, response=PaginatedNotificationResponse)
 def get_notifications(request, limit: int = 10, cursor: str = None):
@@ -18,11 +35,8 @@ def get_notifications(request, limit: int = 10, cursor: str = None):
     - cursor: mốc thời gian của trang trước
     """
     
-    # request.auth thường là object Account/User được trả về từ JWTBearer
     owner = request.auth 
 
-    # Gọi static method bạn đã viết trước đó
-    # Giả sử method đó nằm trong class NotificationService
     result = NotificationService.get_notifications(
         owner=owner,
         limit=limit,
