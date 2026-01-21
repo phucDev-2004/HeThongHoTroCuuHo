@@ -12,6 +12,7 @@ import { ElMessageBox, ElMessage } from 'element-plus';
 // Import Store và Type
 import { useAuthStore } from '~/stores/auth.store';
 import { useRescueStore } from '~/stores/rescueStore';
+
 import type { AppNotification } from '~/types/notification';
 
 const route = useRoute();
@@ -20,11 +21,11 @@ const authStore = useAuthStore();
 const rescueStore = useRescueStore();
 
 // Lấy state từ Store ra (Reactive)
-const { notifications, unreadCount } = storeToRefs(rescueStore);
+const { notifications, unreadCount, hasMore, isLoadingNoti } = storeToRefs(rescueStore);
 
 // --- LOGIC KHỞI TẠO ---
 onMounted( async () => {
-  await rescueStore.fetchNotifications();
+  await rescueStore.fetchNotifications(false);
   // 1. Kết nối WebSocket để nghe tin mới
   rescueStore.connectWebSocket();
   // 2. (Optional) Gọi API lấy danh sách thông báo cũ nếu cần
@@ -51,18 +52,23 @@ const getNotifStyle = (item: AppNotification) => {
 
 
 // Xử lý khi click vào thông báo
-const handleNotificationClick = (item: AppNotification) => {
-  // Đánh dấu đã đọc
-  rescueStore.markAsRead(item.id);
-
-  // Điều hướng
-  if (item.relatedId) {
-      if (item.type === 'new_request') {
-          router.push(`/admin/incidents`);
-      } else {
-          router.push(`/admin/tasks`);
-      }
+const handleNotificationClick = async (item: AppNotification) => {
+  if (!item.isRead) {
+    await rescueStore.markAsRead(item.id);
   }
+  // Điều hướng logic giữ nguyên
+  if (item.relatedId) {
+      if (item.type === 'new_request') router.push(`/admin/incidents`);
+      else router.push(`/admin/tasks`);
+  }
+};
+
+const handleLoadMore = async () => {
+    await rescueStore.fetchNotifications(true); // true = load more
+};
+
+const handleMarkAllRead = async () => {
+    await rescueStore.markAllAsRead();
 };
 
 const formatTime = (date: Date) => {
@@ -178,19 +184,18 @@ const handleLogout = async () => {
             placement="bottom-end" 
             :width="380" 
             trigger="click" 
-            popper-class="!p-0 !rounded-xl !border-0 shadow-2xl" 
+            popper-class="!p-0 !rounded-xl !border-0 shadow-2xl notification-popover" 
             :show-arrow="false" 
             :offset="12"
           >
             <template #reference>
               <button class="relative p-2 rounded-full hover:bg-slate-100 transition-colors focus:outline-none">
-                <el-icon :size="22" class="text-slate-600"><Bell /></el-icon>
-                
-                <span v-if="unreadCount > 0" class="absolute top-1.5 right-1.5 flex h-3 w-3">
-                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75"></span>
-                  <span class="relative inline-flex rounded-full h-3 w-3 bg-red-600 border-2 border-white"></span>
-                </span>
-              </button>
+                  <el-icon :size="22" class="text-slate-600"><Bell /></el-icon>
+                  <span v-if="unreadCount > 0" class="absolute top-1.5 right-1.5 flex h-3 w-3">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-3 w-3 bg-red-600 border-2 border-white"></span>
+                  </span>
+                </button>
             </template>
 
             <div class="flex flex-col max-h-[550px] bg-white rounded-xl overflow-hidden font-sans border border-slate-100">
@@ -200,27 +205,24 @@ const handleLogout = async () => {
                     <button 
                       v-if="unreadCount > 0" 
                       class="text-xs font-semibold text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-2 py-1 rounded transition-colors"
-                      @click="rescueStore.markAllAsRead()"
+                      @click="handleMarkAllRead"
                     >
                         Đánh dấu đã đọc
                     </button>
                 </div>
                 
-                <div class="flex-1 overflow-y-auto scrollbar-mini">
+                <div class="flex-1 overflow-y-auto scrollbar-mini relative">
                     
-                    <div v-if="notifications.length === 0" class="py-12 text-center flex flex-col items-center">
+                    <div v-if="notifications.length === 0 && !isLoadingNoti" class="py-12 text-center flex flex-col items-center">
                         <el-icon :size="48" class="text-slate-200 mb-2"><Bell /></el-icon>
-                        <p class="text-sm text-slate-400 font-medium">Bạn đã xem hết thông báo</p>
+                        <p class="text-sm text-slate-400 font-medium">Không có thông báo mới</p>
                     </div>
 
                     <div v-else class="divide-y divide-slate-100/50">
                         <div v-for="item in notifications" :key="item.id" 
                             @click="handleNotificationClick(item)"
                             class="relative px-4 py-3.5 cursor-pointer transition-all duration-200 flex gap-3 group items-start"
-                            :class="item.isRead 
-                                  ? 'bg-white opacity-60 hover:opacity-100 hover:bg-slate-50' /* ĐÃ ĐỌC: Mờ, chìm */
-                                  : 'bg-blue-50/80 hover:bg-blue-50' /* CHƯA ĐỌC: Xanh nhạt, Nổi bật */
-                            ">
+                            :class="item.isRead ? 'bg-white opacity-70 hover:opacity-100 hover:bg-slate-50' : 'bg-blue-50/80 hover:bg-blue-50'">
                             
                             <div class="shrink-0 mt-0.5">
                                 <div class="w-10 h-10 rounded-full flex items-center justify-center shadow-sm border border-transparent"
@@ -237,30 +239,41 @@ const handleLogout = async () => {
                                         :class="item.isRead ? 'font-medium text-slate-600' : 'font-bold text-slate-900'">
                                         {{ item.title }}
                                     </h4>
-                                    
                                     <span class="text-[10px] whitespace-nowrap shrink-0 font-medium"
                                           :class="item.isRead ? 'text-slate-400' : 'text-blue-600'">
                                         {{ formatTime(item.time) }}
                                     </span>
                                 </div>
-                                
                                 <p class="text-xs leading-snug line-clamp-2" 
-                                  :class="item.isRead ? 'text-slate-400' : 'text-slate-700 font-medium'">
+                                    :class="item.isRead ? 'text-slate-400' : 'text-slate-700 font-medium'">
                                     {{ item.message }}
                                 </p>
                             </div>
-
+                            
                             <div v-if="!item.isRead" class="absolute top-1/2 -translate-y-1/2 right-3">
                                 <div class="w-3 h-3 bg-blue-600 rounded-full shadow-sm ring-2 ring-blue-100"></div>
                             </div>
+                        </div>
+
+                        <div v-if="isLoadingNoti" class="py-3 text-center">
+                          <el-icon class="is-loading text-blue-500" :size="20"><Loading /></el-icon>
                         </div>
                     </div>
                 </div>
                 
                 <div class="border-t border-slate-100 bg-white sticky bottom-0 z-20">
-                    <NuxtLink to="/admin/notifications" class="block w-full py-3 text-center text-xs font-bold text-slate-500 hover:text-blue-600 hover:bg-slate-50 transition-colors">
-                        XEM TẤT CẢ
-                    </NuxtLink>
+                    <button 
+                      v-if="hasMore"
+                      @click.stop="handleLoadMore"
+                      :disabled="isLoadingNoti"
+                      class="block w-full py-3 text-center text-xs font-bold text-slate-500 hover:text-blue-600 hover:bg-slate-50 transition-colors disabled:opacity-50"
+                    >
+                      {{ isLoadingNoti ? 'Đang tải...' : 'XEM CŨ HƠN' }}
+                    </button>
+                    
+                    <div v-else-if="notifications.length > 0" class="py-2 text-center text-[10px] text-slate-400 italic">
+                      Đã hiển thị hết thông báo
+                    </div>
                 </div>
             </div>
           </el-popover>

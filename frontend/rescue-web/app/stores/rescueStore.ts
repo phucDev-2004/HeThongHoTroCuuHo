@@ -7,6 +7,11 @@ export const useRescueStore = defineStore('rescue', {
   state: () => ({
     points: [] as MapItem[],
     notifications: [] as AppNotification[],
+
+    nextCursor: null as string | null,
+    hasMore: false,
+    isLoadingNoti: false,
+
     socketStatus: 'CLOSED' as 'CONNECTING' | 'OPEN' | 'CLOSED',
     socket: null as WebSocket | null,
     reconnectTimer: null as NodeJS.Timeout | null,
@@ -34,49 +39,67 @@ export const useRescueStore = defineStore('rescue', {
     },
 
     // --- 2. LẤY LỊCH SỬ THÔNG BÁO (FETCH API) ---
-    async fetchNotifications() {
+    async fetchNotifications(isLoadMore = false) {
       const { apiFetch } = useApiClient(); 
+      if (this.isLoadingNoti) return;
+      if (isLoadMore && !this.hasMore) return;
+
+      this.isLoadingNoti = true;
+
       try {
-        const res = await apiFetch<{ items: any[] }>('/api/notification', {
+        const params: any = { limit: 10 };
+        if (isLoadMore && this.nextCursor) {
+            params.cursor = this.nextCursor;
+        }
+
+        const res = await apiFetch<any>('/api/notification', {
           method: 'GET',
-          params: { limit: 20 },
+          params: params,
         });
 
-        if (res && res.items) {
-          this.notifications = res.items.map((item: any) => {
-            
-            // LOGIC MỚI: Xử lý subStatus chuẩn xác hơn dựa trên payload của Backend
-            let subStatus: AppNotification['subStatus'] = undefined;
-            const meta = item.meta || {}; // Phòng trường hợp meta null
-            
-            // Ưu tiên check type trước
-            if (item.type === 'new_task') {
-                subStatus = 'ASSIGNED';
-            } else if (item.type === 'complete') {
-                subStatus = 'COMPLETED';
-            } else if (item.type === 'task_update' || item.type === 'update') {
-                // Nếu là update, check status trong meta
-                if (meta.status === 'IN_PROGRESS') subStatus = 'IN_PROGRESS';
-                else if (meta.status === 'ARRIVED') subStatus = 'ARRIVED';
-            }
+        // Mapping dữ liệu (Logic map giữ nguyên như cũ)
+        const mappedItems = (res.items || []).map((item: any) => {
+           const meta = item.meta || {};
+           let subStatus: AppNotification['subStatus'] = undefined;
+           
+           if (item.type === 'new_task') subStatus = 'ASSIGNED';
+           else if (item.type === 'complete') subStatus = 'COMPLETED';
+           else if (['task_update', 'update'].includes(item.type)) {
+               if (meta.status === 'IN_PROGRESS') subStatus = 'IN_PROGRESS';
+               else if (meta.status === 'ARRIVED') subStatus = 'ARRIVED';
+           }
 
-            return {
-              id: item.id,
-              type: item.type as NotificationEventType,
-              title: item.title,
-              message: item.message,
-              time: new Date(item.created_at),
-              isRead: item.is_read,
-              // Map các ID liên quan
-              relatedId: meta.id || meta.request_id || meta.task_id,
-              subStatus: subStatus, // Đã fix logic ở trên
-              lat: meta.latitude ? parseFloat(meta.latitude) : undefined,
-              lng: meta.longitude ? parseFloat(meta.longitude) : undefined,
-            } as AppNotification;
-          });
+           return {
+             id: item.id,
+             type: item.type as NotificationEventType,
+             title: item.title,
+             message: item.message,
+             time: new Date(item.created_at),
+             isRead: item.is_read,
+             relatedId: meta.id || meta.request_id || meta.task_id,
+             subStatus: subStatus,
+             lat: meta.latitude ? parseFloat(meta.latitude) : undefined,
+             lng: meta.longitude ? parseFloat(meta.longitude) : undefined,
+           } as AppNotification;
+        });
+
+        // XỬ LÝ STATE SAU KHI CÓ DỮ LIỆU
+        if (isLoadMore) {
+            // Nối thêm vào danh sách cũ
+            this.notifications.push(...mappedItems);
+        } else {
+            // Làm mới hoàn toàn (khi F5 hoặc mới vào)
+            this.notifications = mappedItems;
         }
+
+        // Cập nhật Cursor cho lần load sau
+        this.hasMore = res.has_more;
+        this.nextCursor = res.next_cursor;
+
       } catch (error) {
         console.error('Lỗi tải thông báo:', error);
+      } finally {
+        this.isLoadingNoti = false;
       }
     },
 
@@ -227,13 +250,45 @@ export const useRescueStore = defineStore('rescue', {
       }
     },
 
-    // --- Helper ---
-    markAsRead(notiId: string) {
+    async markAsRead(notiId: string) {
       const noti = this.notifications.find((n) => n.id === notiId);
-      if (noti) noti.isRead = true;
+      if (!noti || noti.isRead) return;
+
+      const { apiFetch } = useApiClient();
+      try {
+        noti.isRead = true;
+
+        // 2. Gọi API background
+        await apiFetch(`/api/notification/read-one/${notiId}`, { method: 'GET' });
+        
+      } catch (error) {
+        console.error('Lỗi API markAsRead:', error);
+        // Revert lại nếu lỗi mạng
+        noti.isRead = false; 
+      }
     },
-    markAllAsRead() {
-      this.notifications.forEach((n) => (n.isRead = true));
+
+    // Đọc tất cả
+    async markAllAsRead() {
+      if (this.unreadCount === 0) return;
+
+      const { apiFetch } = useApiClient();
+
+      try {
+        this.notifications.forEach((n) => (n.isRead = true));
+
+        // 2. Gọi API
+        await apiFetch('/api/notification/read-all', { method: 'GET' });
+
+        // (Optional) Toast thông báo
+        // ElMessage.success('Đã đánh dấu tất cả là đã đọc');
+
+      } catch (error) {
+        console.error('Lỗi API markAllAsRead:', error);
+        
+        // Nếu lỗi, cách tốt nhất là tải lại danh sách từ server để đồng bộ đúng trạng thái
+        await this.fetchNotifications();
+      }
     },
     disconnect() {
       if (this.socket) {

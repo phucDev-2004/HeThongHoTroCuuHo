@@ -52,7 +52,7 @@ export const useRescueService = () => {
     };
 
     const getDashboardStats = async () => {
-        return await apiFetch<any>('/dashboard/status'); 
+        return await apiFetch<any>('/api/dashboard/status'); 
     };
 
 

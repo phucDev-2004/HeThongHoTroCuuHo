@@ -117,7 +117,7 @@ const getStatusText = (status: string) => {
 }
 
 const navigateToDetail = (id: string) => {
-  router.push(`/admin/incidents`); // Cập nhật logic điều hướng cụ thể nếu cần
+  router.push(`/admin/incidents`);
 };
 
 // --- DATA FETCHING ---
