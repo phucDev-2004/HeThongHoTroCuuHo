@@ -10,10 +10,14 @@ class AssignTaskIn(Schema):
 
 class ConfirmStartIn(Schema):
     assignment_id: str
+    latitude: float
+    longitude: float
 
 class CompleteTaskIn(Schema):
     assignment_id: str
     outcome_note: Optional[str] = None
+    latitude: float
+    longitude: float
 
 class FindNearest(Schema):
     latitude: float
@@ -39,3 +43,7 @@ class AssignmentOut(Schema):
     assigned_at: datetime
     rescue_request: RescueRequestSchema
     rescue_team: RescueTeamOut
+
+class LocationUpdateIn(Schema):
+    latitude: float
+    longitude: float

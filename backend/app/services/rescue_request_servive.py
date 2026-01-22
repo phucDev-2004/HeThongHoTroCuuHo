@@ -247,6 +247,31 @@ class RescueRequestService():
             """)
             
         return params, conditions
+    
+    @classmethod
+    def get_request_detail(cls, request_id: str):
+        """
+        Lấy chi tiết 1 request theo ID.
+        Tận dụng lại SQL của search để đảm bảo đủ field (active_assignment, media_urls...)
+        """
+        # 1. Thiết lập tham số: tìm đúng ID này
+        params = {
+            "id": request_id,
+            "limit": 1,
+            "offset": 0
+        }
+        
+        # 2. Điều kiện lọc theo ID
+        conditions = ["r.id = %(id)s"]
+
+        # 3. Gọi hàm private có sẵn logic SQL xịn
+        result = cls._execute_search_query(conditions, params, page=1, size=1)
+        
+        items = result.get("items", [])
+        
+        if items:
+            return items[0] # Trả về item đầu tiên
+        return None
 
     @classmethod
     def get_my_requests(cls, account_id: str, page: int, size: int, status_filter: RescueStatus = None, search: str = None):

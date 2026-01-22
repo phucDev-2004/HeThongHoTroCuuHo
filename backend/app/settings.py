@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 from typing import Final
 from dotenv import load_dotenv
+from corsheaders.defaults import default_headers
 
 # ==============================================================================
 # 1. CORE SETUP & ENVIRONMENT
@@ -66,6 +67,10 @@ else:
 
 # Cho phép gửi cookie/token (Quan trọng cho đăng nhập)
 CORS_ALLOW_CREDENTIALS = True
+
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    'cache-control',
+]
 
 
 # ==============================================================================

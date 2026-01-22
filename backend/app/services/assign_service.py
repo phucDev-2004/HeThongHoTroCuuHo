@@ -230,8 +230,23 @@ class AssignService:
         except RescueAssignments.DoesNotExist:
             raise ValidationError("Nhiệm vụ không tồn tại hoặc sai trạng thái.")
         
+
+    
     @staticmethod
-    def confirm_team_start(assignment_id: str, account_id: str):
+    def _update_team_location_raw(team_id, lat, lng):
+        """Hàm cập nhật vị trí nhanh bằng SQL thuần"""
+        sql = """
+            UPDATE rescue_teams 
+            SET location = ST_SetSRID(ST_MakePoint(%s, %s), 4326),
+                updated_at = NOW()
+            WHERE id = %s
+        """
+        with connection.cursor() as cursor:
+            cursor.execute(sql, [lng, lat, team_id])
+
+
+    @staticmethod
+    def confirm_team_start(assignment_id: str, account_id: str, lat: float, lng: float):
         with transaction.atomic():
             task = AssignService._get_team_task(assignment_id, account_id, TaskStatus.ASSIGNED)
             
@@ -261,6 +276,8 @@ class AssignService:
             if rescue_req.account_id:
                 account_ids.append(str(rescue_req.account_id))
 
+            AssignService._update_team_location_raw(task.rescue_team_id, lat, lng)
+
             NotificationService.send_notify(
                 groups=target_groups,
                 event=Notification.NotificationType.TASK_UPDATE,
@@ -273,7 +290,7 @@ class AssignService:
             return task
         
     @staticmethod
-    def confirm_team_arrived(assignment_id: str, account_id: str):
+    def confirm_team_arrived(assignment_id: str, account_id: str,  lat: float, lng: float):
         """Bước 4: Đội báo đã đến nơi"""
         with transaction.atomic():
             task = AssignService._get_team_task(assignment_id, account_id, TaskStatus.IN_PROGRESS)
@@ -298,6 +315,8 @@ class AssignService:
             if task.rescue_request.account_id:
                 account_ids.append(str(task.rescue_request.account_id))
 
+            AssignService._update_team_location_raw(task.rescue_team_id, lat, lng)
+
             NotificationService.send_notify(
                 groups=target_groups, 
                 event=Notification.NotificationType.TASK_UPDATE,
@@ -310,7 +329,7 @@ class AssignService:
             return task
     
     @staticmethod
-    def complete_task(assignment_id: str, account_id: str, outcome_note: str = ""):
+    def complete_task(assignment_id: str, account_id: str, lat: float, lng: float, outcome_note: str = ""):
         """Bước 5: Hoàn thành nhiệm vụ"""
         with transaction.atomic():
             # Lấy task đang chạy hoặc đã đến nơi
@@ -355,6 +374,8 @@ class AssignService:
             if rescue_req.account_id:
                 account_ids.append(str(rescue_req.account_id))
 
+            AssignService._update_team_location_raw(team.id, lat, lng)
+
             NotificationService.send_notify(
                 groups=target_groups,
                 event=Notification.NotificationType.COMPLETE,
@@ -365,3 +386,69 @@ class AssignService:
             )
 
             return task
+        
+
+    @staticmethod
+    def cancel_assignment(assignment_id: str, admin_id: str, reason: str = ""):
+        """
+        Hủy phân công (Xóa bản ghi phân công).
+        - Đội cứu hộ -> AVAILABLE
+        - Yêu cầu -> PENDING
+        - Xóa Assignment
+        """
+        with transaction.atomic():
+            # 1. Tìm nhiệm vụ và khóa dòng (Lock)
+            try:
+                task = RescueAssignments.objects.select_for_update().select_related('rescue_team', 'rescue_request').get(id=assignment_id)
+            except RescueAssignments.DoesNotExist:
+                raise Http404("Không tìm thấy nhiệm vụ phân công này.")
+
+            # 2. Validate: Không thể xóa nhiệm vụ đã hoàn thành (để giữ lịch sử)
+            if task.status == TaskStatus.COMPLETED:
+                raise ValidationError("Nhiệm vụ đã hoàn thành, không thể hủy/xóa.")
+
+            # 3. Lấy các object liên quan trước khi xóa task
+            team = task.rescue_team
+            request = task.rescue_request
+
+            # 4. Revert (Hoàn tác) trạng thái Đội cứu hộ -> AVAILABLE
+            team.status = TeamStatus.AVAILABLE
+            team.save(update_fields=['status'])
+
+            request.status = RESCUE_STATUS[RescueStatus.PENDING]
+            request.save(update_fields=['status'])
+
+            # 6. Chuẩn bị dữ liệu thông báo (Phải làm trước khi delete)
+            payload = {
+                "task_id": str(task.id), # Frontend có thể dùng ID này để xóa dòng khỏi UI
+                "request_id": str(request.id),
+                "status": "DELETED", # Custom status báo hiệu đã bị xóa
+                "msg": f"Lệnh điều động đã bị hủy bỏ. Lý do: {reason}",
+                "team_id": str(team.id)
+            }
+
+            # Xác định người nhận thông báo
+            target_groups = ["rescue_admin", f"rescue_team_{team.id}"]
+            account_ids = []
+            
+            if request.account_id:
+                target_groups.append(f"user_{request.account_id}")
+                account_ids.append(str(request.account_id))
+            
+            if team.account_id:
+                account_ids.append(str(team.account_id))
+
+            # 7. Gửi thông báo
+            NotificationService.send_notify(
+                groups=target_groups,
+                event=Notification.NotificationType.TASK_UPDATE, # Hoặc định nghĩa type mới: TASK_REVOKED
+                title="Thu hồi lệnh điều động",
+                message=f"Admin đã hủy lệnh điều động đội {team.name}. Lý do: {reason}",
+                data=payload,
+                account_ids=account_ids
+            )
+
+            # 8. XÓA BẢN GHI (DELETE)
+            task.delete()
+
+            return True
