@@ -15,6 +15,11 @@ import { useRescueStore } from '~/stores/rescueStore';
 
 import type { AppNotification } from '~/types/notification';
 
+useHead({
+  title: 'Quản lý Cứu Hộ - RescueLink Admin', 
+  // Hoặc tên nào bạn thích, ví dụ: 'Tổng quan - RescueLink'
+});
+
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
@@ -76,9 +81,30 @@ const formatTime = (date: Date) => {
 };
 
 const menuItems = [
-  { group: 'Điều Hành', items: [{ name: 'Tổng quan', path: '/admin', icon: Monitor }, { name: 'Bản đồ trực chiến', path: '/admin/map', icon: Location }] },
-  { group: 'Quản Lý Sự Cố', items: [{ name: 'Danh sách sự cố', path: '/admin/incidents', icon: List }, { name: 'Danh sách nhiệm vụ', path: '/admin/tasks', icon: List }, { name: 'Phân tích dữ liệu', path: '/admin/analytics', icon: DataAnalysis }] },
-  { group: 'Hệ Thống', items: [{ name: 'Người dùng & Cán bộ', path: '/admin/accounts', icon: User }, { name: 'Đội Cứu Hộ', path: '/admin/teams', icon: FirstAidKit }, { name: 'Cấu hình hệ thống', path: '/admin/settings', icon: Setting }, { name: 'Kiểm tra kết nối', path: '/admin/check', icon: CircleCheck }] }
+  { 
+    group: 'Điều Hành', 
+    items: [
+      { name: 'Tổng quan', path: '/admin', icon: Monitor }, 
+      { name: 'Bản đồ trực chiến', path: '/admin/map', icon: Location }
+    ] 
+  },
+  { 
+    group: 'Quản Lý Sự Cố', 
+    items: [
+      { name: 'Danh sách sự cố', path: '/admin/incidents', icon: List },
+      { name: 'Danh sách nhiệm vụ', path: '/admin/tasks', icon: List }, 
+      // { name: 'Phân tích dữ liệu', path: '/admin/analytics', icon: DataAnalysis }
+    ] 
+  },
+  { 
+    group: 'Hệ Thống', 
+    items: [
+      { name: 'Người dùng & Cán bộ', path: '/admin/accounts', icon: User }, 
+      { name: 'Đội Cứu Hộ', path: '/admin/teams', icon: FirstAidKit }, 
+      // { name: 'Cấu hình hệ thống', path: '/admin/settings', icon: Setting }, 
+      // { name: 'Kiểm tra kết nối', path: '/admin/check', icon: CircleCheck }
+    ] 
+  }
 ];
 
 const handleLogout = async () => {
@@ -120,7 +146,16 @@ const handleLogout = async () => {
 </script>
 
 <template>
-  <div class="flex h-screen bg-slate-50 font-sans text-slate-600">
+
+  <div class="fixed top-0 left-0 w-full z-[9999] bg-yellow-400 text-slate-900 h-6 flex items-center overflow-hidden shadow-sm border-b border-yellow-500">
+     <div class="whitespace-nowrap animate-marquee font-bold text-xs uppercase tracking-wider flex gap-8">
+        <span>⚠️ SẢN PHẨM KHÔNG CÓ MỤC ĐÍCH THƯƠNG MẠI - ĐANG PHỤC VỤ QUÁ TRÌNH HỌC TẬP & NGHIÊN CỨU ⚠️</span>
+        <span>⚠️ SẢN PHẨM KHÔNG CÓ MỤC ĐÍCH THƯƠNG MẠI - ĐANG PHỤC VỤ QUÁ TRÌNH HỌC TẬP & NGHIÊN CỨU ⚠️</span>
+        <span>⚠️ SẢN PHẨM KHÔNG CÓ MỤC ĐÍCH THƯƠNG MẠI - ĐANG PHỤC VỤ QUÁ TRÌNH HỌC TẬP & NGHIÊN CỨU ⚠️</span>
+        <span>⚠️ SẢN PHẨM KHÔNG CÓ MỤC ĐÍCH THƯƠNG MẠI - ĐANG PHỤC VỤ QUÁ TRÌNH HỌC TẬP & NGHIÊN CỨU ⚠️</span>
+     </div>
+  </div>
+  <div class="flex h-screen bg-slate-50 font-sans text-slate-600 pt-6">
     
     <aside class="w-72 bg-[#0f172a] text-slate-200 flex flex-col transition-all duration-300 border-r border-slate-800 shadow-2xl z-20">
        <div class="h-16 flex items-center px-6 border-b border-slate-800 bg-[#0B1120]">
@@ -329,4 +364,15 @@ const handleLogout = async () => {
 
 .animate-fade-in-up { animation: fadeInUp 0.4s ease-out forwards; }
 @keyframes fadeInUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+/* Định nghĩa animation chạy chữ */
+.animate-marquee {
+  animation: marquee 25s linear infinite;
+}
+
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); } /* Chạy hết 50% độ dài (do mình lặp lại text) */
+}
 </style>
+

@@ -51,6 +51,12 @@ export const useRescueService = () => {
         });
     };
 
+    const cancelAssignment = async (assignmentId: string): Promise<void> => {
+        await apiFetch(`/api/rescue-teams/assignments/${assignmentId}`, {
+            method: 'DELETE'
+        });
+    };
+
     const getDashboardStats = async () => {
         return await apiFetch<any>('/api/dashboard/status'); 
     };
@@ -62,6 +68,7 @@ export const useRescueService = () => {
         findNearbyTeams,
         assignTeam,
         getAssignments,
+        cancelAssignment,
         getDashboardStats
     };
 };

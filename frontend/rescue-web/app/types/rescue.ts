@@ -1,6 +1,7 @@
 export interface RescueRequest {
     id: string;
     name: string;
+    code: string;
     contact_phone: string;
     adults: number;
     children: number;

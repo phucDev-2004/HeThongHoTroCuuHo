@@ -14,11 +14,32 @@ defineEmits<{
 // Helper functions
 const formatDate = (date: string) => dayjs(date).format('HH:mm DD/MM/YYYY');
 
+// --- LOGIC MÀU SẮC TRẠNG THÁI ---
 const getStatusType = (status: string) => {
-    // Logic map màu sắc dựa trên key từ Backend
-    if (status === 'PENDING') return 'danger';
-    if (status === 'IN_PROGRESS') return 'warning';
-    if (status === 'COMPLETED') return 'success';
+    // Chuyển về chữ hoa để so sánh cho chuẩn
+    const s = status?.toUpperCase();
+
+    // 1. Màu ĐỎ (Khẩn cấp / Chờ xử lý)
+    if (['PENDING', 'NEW', 'CHỜ XỬ LÝ', 'MỚI'].includes(s)) {
+        return 'danger'; 
+    }
+    
+    // 2. Màu CAM (Đang thực hiện / Đang di chuyển)
+    if (['IN_PROGRESS', 'MOVING', 'ĐANG XỬ LÝ', 'ĐANG DI CHUYỂN'].includes(s)) {
+        return 'warning';
+    }
+
+    // 3. Màu XANH DƯƠNG (Đã điều động / Đã tiếp nhận)
+    if (['DISPATCHED', 'ACCEPTED', 'ĐÃ ĐIỀU ĐỘNG', 'ĐÃ TIẾP NHẬN'].includes(s)) {
+        return 'primary';
+    }
+
+    // 4. Màu XANH LÁ (Hoàn thành)
+    if (['COMPLETED', 'DONE', 'HOÀN THÀNH'].includes(s)) {
+        return 'success';
+    }
+
+    // 5. Màu XÁM (Hủy / Khác)
     return 'info';
 };
 </script>
@@ -38,6 +59,12 @@ const getStatusType = (status: string) => {
             </template>
         </el-table-column>
 
+        <el-table-column label="Mã SCC" width="200">
+            <template #default="{ row }">
+                <span class="font-bold text-slate-800">{{row.code}}</span>
+            </template>
+        </el-table-column>
+
         <el-table-column label="Người Yêu Cầu" min-width="180">
             <template #default="{ row }">
                 <div class="flex flex-col">
@@ -47,30 +74,17 @@ const getStatusType = (status: string) => {
             </template>
         </el-table-column>
 
-        <el-table-column prop="people_summary" label="Nạn Nhân" width="150">
+        <el-table-column prop="people_summary" label="Nạn Nhân" width="160">
             <template #default="{ row }">
                 <el-tag effect="plain" round>{{ row.people_summary }}</el-tag>
             </template>
         </el-table-column>
 
-        <el-table-column label="Nhu cầu" min-width="180">
-            <template #default="{ row }">
-                <div class="flex flex-wrap gap-1">
-                    <el-tag 
-                        v-for="(c, i) in row.conditions" :key="i" 
-                        size="small" type="danger" effect="light"
-                    >
-                        {{ c }}
-                    </el-tag>
-                </div>
-            </template>
-        </el-table-column>
+        <el-table-column prop="address" width="240" label="Địa Chỉ" show-overflow-tooltip />
 
-        <el-table-column prop="address" label="Địa Chỉ" show-overflow-tooltip />
-
-        <el-table-column label="Trạng Thái" width="120" align="center">
+        <el-table-column label="Trạng Thái" width="100" align="center">
             <template #default="{ row }">
-                <el-tag :type="getStatusType(row.status)" size="small">
+                <el-tag :type="getStatusType(row.status)" effect="light" size="small" class="font-bold">
                     {{ row.status }}
                 </el-tag>
             </template>

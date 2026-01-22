@@ -4,14 +4,15 @@ import { useAuthStore } from '~/stores/auth.store';
 import { ElMessage } from 'element-plus';
 import { 
   User, Lock, Right, Loading, 
-  InfoFilled, Message, Checked, Connection 
+  InfoFilled, Message, Checked, Connection, 
+  CopyDocument // Import thêm icon Copy
 } from '@element-plus/icons-vue';
 
 // Sử dụng layout 'auth' (trống, không có header/footer) cho trang login
 definePageMeta({ layout: 'auth' });
 
 const authStore = useAuthStore();
-const router = useRouter(); // Dùng router để chuyển trang
+const router = useRouter(); 
 const isLoginMode = ref(true);
 
 // Form State
@@ -25,6 +26,14 @@ const formData = reactive({
 
 const pageTitle = computed(() => isLoginMode.value ? 'Đăng nhập hệ thống' : 'Thiết lập định danh');
 const pageDesc = computed(() => isLoginMode.value ? 'Nhập thông tin xác thực quyền truy cập.' : 'Đăng ký tài khoản cán bộ mới.');
+
+// --- HÀM HỖ TRỢ TEST ---
+const fillDemoAccount = () => {
+  formData.email = '0355308724';
+  formData.password = 'Pb2345678@';
+  ElMessage.info('Đã điền thông tin tài khoản Demo.');
+};
+// -----------------------
 
 const toggleMode = () => {
   isLoginMode.value = !isLoginMode.value;
@@ -52,7 +61,6 @@ const handleSubmit = async () => {
 
   try {
     if (isLoginMode.value) {
-      
       // 2. Gọi API Login từ Store
       await authStore.login({ identifier: formData.email, password: formData.password });
       
@@ -67,17 +75,14 @@ const handleSubmit = async () => {
 
       setTimeout(() => {
         if (userRole === 'admin' || userRole === 'dispatcher') {
-           // Nếu là Admin/Điều phối viên -> Vào trang quản trị
            navigateTo('/admin'); 
         } else {
-           // Nếu là Người dân -> Vào trang SOS
            navigateTo('/'); 
         }
-      }, 1000); // Delay 1s để user kịp đọc thông báo
+      }, 1000); 
 
     } else {
       // --- XỬ LÝ ĐĂNG KÝ ---
-      // await authStore.register(formData); 
       await new Promise(r => setTimeout(r, 1500));
       ElMessage.success('Đăng ký hồ sơ thành công. Vui lòng đăng nhập.');
       toggleMode(); 
@@ -99,7 +104,6 @@ const handleSubmit = async () => {
       />
       <div class="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20"></div>
       <div class="absolute inset-0 bg-gradient-to-t from-[#0B1120] via-[#0B1120]/90 to-[#0B1120]/40"></div>
-      
       <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-red-900/10 rounded-full blur-3xl"></div>
     </div>
 
@@ -107,7 +111,6 @@ const handleSubmit = async () => {
       
       <div class="hidden md:flex w-[40%] bg-gradient-to-br from-[#1F2937]/80 to-[#111827]/90 flex-col justify-between p-10 relative border-r border-gray-800">
         <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-red-600 to-transparent opacity-50"></div>
-
         <div>
           <div class="flex items-center gap-4 mb-8">
              <div class="relative group">
@@ -124,17 +127,11 @@ const handleSubmit = async () => {
                </div>
              </div>
           </div>
-          
           <div class="space-y-6">
-            <h3 class="text-gray-200 font-medium text-lg leading-snug">
-              Hệ thống quản lý & <br/>điều phối ứng cứu khẩn cấp
-            </h3>
-            <p class="text-sm text-gray-400 leading-relaxed">
-              Kết nối thời gian thực giữa trung tâm chỉ huy và các đơn vị thực địa. Đảm bảo an toàn thông tin cấp độ cao.
-            </p>
+            <h3 class="text-gray-200 font-medium text-lg leading-snug">Hệ thống quản lý & <br/>điều phối ứng cứu khẩn cấp</h3>
+            <p class="text-sm text-gray-400 leading-relaxed">Kết nối thời gian thực giữa trung tâm chỉ huy và các đơn vị thực địa.</p>
           </div>
         </div>
-
         <div class="space-y-4">
            <div class="p-4 rounded-lg bg-[#0B1120]/50 border border-gray-700/50 backdrop-blur-sm">
              <div class="flex items-center justify-between mb-2">
@@ -148,16 +145,13 @@ const handleSubmit = async () => {
              </div>
              <div class="mt-2 text-[10px] text-gray-500 font-mono">Latency: 12ms | Encryption: AES-256</div>
            </div>
-           
-           <div class="text-[10px] text-gray-600">
-             © 2024 National Rescue Committee.
-           </div>
+           <div class="text-[10px] text-gray-600">© 2024 National Rescue Committee.</div>
         </div>
       </div>
 
       <div class="w-full md:w-[60%] p-8 md:p-12 flex flex-col justify-center relative">
         
-        <div class="mb-8">
+        <div class="mb-6">
           <transition name="fade-slide" mode="out-in">
             <div :key="isLoginMode ? 'login-header' : 'reg-header'">
               <h2 class="text-2xl font-bold text-white mb-2">{{ pageTitle }}</h2>
@@ -169,55 +163,33 @@ const handleSubmit = async () => {
         <el-form :model="formData" size="large" @submit.prevent class="space-y-5 relative">
           
           <transition-group name="list" tag="div" class="space-y-5">
-            
             <div v-if="!isLoginMode" key="fullname" class="group">
               <label class="text-[11px] font-bold text-gray-500 mb-1.5 block uppercase tracking-wider">Họ và tên cán bộ</label>
-              <el-input 
-                v-model="formData.fullName" 
-                placeholder="NGUYEN VAN A"
-                class="pro-input"
-              >
+              <el-input v-model="formData.fullName" placeholder="NGUYEN VAN A" class="pro-input">
                 <template #prefix><el-icon class="text-gray-500"><User /></el-icon></template>
               </el-input>
             </div>
 
             <div key="email" class="group">
               <label class="text-[11px] font-bold text-gray-500 mb-1.5 block uppercase tracking-wider">SĐT định danh</label>
-              <el-input 
-                v-model="formData.email" 
-                placeholder="0999996868"
-                class="pro-input"
-              >
+              <el-input v-model="formData.email" placeholder="0999996868" class="pro-input">
                 <template #prefix><el-icon class="text-gray-500"><Message /></el-icon></template>
               </el-input>
             </div>
 
             <div key="password" class="group">
               <label class="text-[11px] font-bold text-gray-500 mb-1.5 block uppercase tracking-wider">Mật khẩu bảo mật</label>
-              <el-input 
-                v-model="formData.password" 
-                type="password" 
-                placeholder="••••••••••••" 
-                show-password
-                class="pro-input"
-              >
+              <el-input v-model="formData.password" type="password" placeholder="••••••••••••" show-password class="pro-input">
                 <template #prefix><el-icon class="text-gray-500"><Lock /></el-icon></template>
               </el-input>
             </div>
 
             <div v-if="!isLoginMode" key="confirm" class="group">
               <label class="text-[11px] font-bold text-gray-500 mb-1.5 block uppercase tracking-wider">Xác nhận mật khẩu</label>
-              <el-input 
-                v-model="formData.confirmPassword" 
-                type="password" 
-                placeholder="••••••••••••" 
-                show-password
-                class="pro-input"
-              >
+              <el-input v-model="formData.confirmPassword" type="password" placeholder="••••••••••••" show-password class="pro-input">
                 <template #prefix><el-icon class="text-gray-500"><Checked /></el-icon></template>
               </el-input>
             </div>
-
           </transition-group>
 
           <div class="pt-2">
@@ -233,20 +205,30 @@ const handleSubmit = async () => {
               <el-icon v-else class="animate-spin"><Loading /></el-icon>
             </button>
           </div>
+          
+          <div v-if="isLoginMode" class="mt-4 p-3 rounded bg-blue-900/20 border border-blue-800/50 flex items-start gap-3 cursor-pointer hover:bg-blue-900/30 transition-colors group" @click="fillDemoAccount">
+             <div class="mt-0.5 text-blue-400"><el-icon><InfoFilled /></el-icon></div>
+             <div class="flex-1">
+                <p class="text-xs text-blue-300 font-semibold mb-1 flex items-center gap-2">
+                  Tài khoản Demo (Admin)
+                  <el-icon class="opacity-0 group-hover:opacity-100 transition-opacity text-blue-400"><CopyDocument /></el-icon>
+                </p>
+                <div class="text-[11px] text-gray-400 font-mono space-y-0.5">
+                   <p>User: <span class="text-gray-300 select-all">0355308724</span></p>
+                   <p>Pass: <span class="text-gray-300 select-all">Pb2345678@</span></p>
+                </div>
+             </div>
+             <div class="text-[10px] text-blue-500/70 italic mt-auto self-end">Click để điền nhanh</div>
+          </div>
 
           <div class="flex justify-between items-center mt-6 pt-4 border-t border-gray-700/30">
-             
              <div class="text-sm text-gray-400">
                <span v-if="isLoginMode">Chưa có tài khoản? </span>
                <span v-else>Đã có tài khoản? </span>
-               <button 
-                 @click="toggleMode" 
-                 class="text-red-400 hover:text-red-300 font-medium transition-colors ml-1 underline underline-offset-4"
-               >
+               <button @click="toggleMode" class="text-red-400 hover:text-red-300 font-medium transition-colors ml-1 underline underline-offset-4">
                  {{ isLoginMode ? 'Đăng ký cấp quyền' : 'Đăng nhập ngay' }}
                </button>
              </div>
-
              <a v-if="isLoginMode" href="#" class="text-xs text-gray-500 hover:text-gray-400 transition-colors">Quên mật khẩu?</a>
           </div>
 
@@ -257,7 +239,7 @@ const handleSubmit = async () => {
 </template>
 
 <style scoped>
-/* CUSTOM FONT */
+/* (Giữ nguyên phần style cũ của bạn ở đây) */
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Inter:wght@400;500;600;700&display=swap');
 
 .font-sans { font-family: 'Inter', sans-serif; }
@@ -265,7 +247,7 @@ const handleSubmit = async () => {
 
 /* PRO INPUT STYLING */
 :deep(.pro-input .el-input__wrapper) {
-  background-color: rgba(17, 24, 39, 0.5) !important; /* Semi-transparent */
+  background-color: rgba(17, 24, 39, 0.5) !important; 
   border: 1px solid #374151;
   border-radius: 8px;
   box-shadow: none !important;
@@ -273,13 +255,11 @@ const handleSubmit = async () => {
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Hover State */
 :deep(.pro-input .el-input__wrapper:hover) {
   border-color: #4B5563;
   background-color: rgba(17, 24, 39, 0.8) !important;
 }
 
-/* Focus State */
 :deep(.pro-input .el-input__wrapper.is-focus) {
   border-color: #B91C1C; 
   background-color: rgba(11, 17, 32, 1) !important;
@@ -289,7 +269,7 @@ const handleSubmit = async () => {
 :deep(.pro-input .el-input__inner) {
   color: #F3F4F6 !important;
   height: 44px;
-  font-family: 'JetBrains Mono', monospace; /* Tech vibe for text */
+  font-family: 'JetBrains Mono', monospace; 
   font-size: 13px;
 }
 
@@ -307,32 +287,11 @@ const handleSubmit = async () => {
   animation: fadeInUp 0.6s ease-out forwards;
 }
 
-/* VUE TRANSITIONS */
-/* List transition (cho input fields) */
-.list-enter-active,
-.list-leave-active {
-  transition: all 0.4s ease;
-}
-.list-enter-from,
-.list-leave-to {
-  opacity: 0;
-  transform: translateX(-10px); /* Trượt nhẹ sang trái */
-  height: 0; /* Thu gọn chiều cao */
-  margin: 0;
-  overflow: hidden;
-}
+/* Transitions */
+.list-enter-active, .list-leave-active { transition: all 0.4s ease; }
+.list-enter-from, .list-leave-to { opacity: 0; transform: translateX(-10px); height: 0; margin: 0; overflow: hidden; }
 
-/* Fade Slide (cho Header) */
-.fade-slide-enter-active,
-.fade-slide-leave-active {
-  transition: all 0.3s ease;
-}
-.fade-slide-enter-from {
-  opacity: 0;
-  transform: translateY(-10px);
-}
-.fade-slide-leave-to {
-  opacity: 0;
-  transform: translateY(10px);
-}
+.fade-slide-enter-active, .fade-slide-leave-active { transition: all 0.3s ease; }
+.fade-slide-enter-from { opacity: 0; transform: translateY(-10px); }
+.fade-slide-leave-to { opacity: 0; transform: translateY(10px); }
 </style>

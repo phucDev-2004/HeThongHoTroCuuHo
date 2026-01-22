@@ -7,8 +7,11 @@ import {
 import type { RescueRequest } from '@/types/rescue';
 import { LMap, LTileLayer, LMarker, LPopup, LPolyline, LIcon } from '@vue-leaflet/vue-leaflet';
 import 'leaflet/dist/leaflet.css';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus'; // Import ElMessageBox
 import RescueDispatch from './RescueDispatch.vue';
+
+// Giả sử bạn đã export useRescueService từ composables
+// import { useRescueService } from '@/composables/useRescueService'; 
 
 // --- IMPORT ICONS TRỰC TIẾP ---
 import iconUrl from 'leaflet/dist/images/marker-icon.png';
@@ -20,6 +23,9 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits(['refresh']);
+
+// Initialize service
+const { cancelAssignment } = useRescueService();
 const MEDIA_BASE_URL = 'http://localhost:8000/media/'; 
 
 const zoom = ref(13);
@@ -63,6 +69,38 @@ const handleOpenDispatch = () => {
     showDispatchDialog.value = true;
 };
 
+// --- LOGIC HỦY ĐIỀU PHỐI ---
+const handleCancelDispatch = () => {
+  // Use props.request instead of currentRequest.value
+  const assignmentId = props.request?.active_assignment?.task_id;
+  
+  if (!assignmentId) {
+      ElMessage.warning('Không tìm thấy nhiệm vụ để hủy');
+      return;
+  }
+
+  ElMessageBox.prompt('Vui lòng nhập lý do hủy điều phối:', 'Xác nhận hủy phân công', {
+    confirmButtonText: 'Đồng ý',
+    cancelButtonText: 'Đóng',
+    inputType: 'textarea',
+    inputPattern: /.{5,}/,
+    inputErrorMessage: 'Lý do phải dài hơn 5 ký tự'
+  }).then(async ({ value }) => {
+    try {
+      // Gọi Service
+      await cancelAssignment(assignmentId);
+      
+      ElMessage.success('Đã hủy phân công thành công');
+      // Refresh dữ liệu để cập nhật UI
+      emit('refresh'); 
+    } catch (e: any) {
+      ElMessage.error(e.message || 'Lỗi khi hủy phân công');
+    }
+  }).catch(() => {
+      // User cancelled
+  });
+};
+
 const onAssignSuccess = () => {
     ElMessage.success('Điều động đội cứu hộ thành công!');
     showDispatchDialog.value = false;
@@ -79,7 +117,6 @@ watch(() => props.request, (newVal) => {
 
 onMounted(() => {
     isBrowser.value = true;
-    // Không cần hack L.Icon.Default nữa
 });
 </script>
 
@@ -98,7 +135,6 @@ onMounted(() => {
         </div>
 
         <div v-if="request" class="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
-            
             <div class="h-60 rounded-lg overflow-hidden border border-slate-300 relative z-0 shadow-sm">
                 <div v-if="isBrowser" class="h-full w-full">
                     <l-map 
@@ -257,7 +293,7 @@ onMounted(() => {
                 </div>
             </div>
 
-            <div class="pt-2 mt-auto sticky bottom-0 bg-white pb-2 border-t border-slate-100">
+            <div class="pt-2 mt-auto sticky bottom-0 bg-white pb-2 border-t border-slate-100 z-10">
                 
                 <div v-if="request.active_assignment" class="bg-green-50 border border-green-200 rounded-lg p-3 shadow-sm">
                     <div class="flex items-center justify-between mb-2">
@@ -280,8 +316,21 @@ onMounted(() => {
                     </div>
 
                     <div class="flex gap-2 mt-3">
-                        <el-button size="small" type="primary" plain class="flex-1">Gọi điện</el-button>
-                        <el-button size="small" type="danger" text bg class="flex-1">Hủy Đội</el-button>
+                        <a :href="request.active_assignment.team_phone ? `tel:${request.active_assignment.team_phone}` : '#'" 
+                           class="flex-1 block">
+                             <el-button size="small" type="primary" plain class="w-full">Gọi điện</el-button>
+                        </a>
+                        
+                        <el-button 
+                            size="small" 
+                            type="danger" 
+                            text 
+                            bg 
+                            class="flex-1"
+                            @click="handleCancelDispatch"
+                        >
+                            Hủy Đội
+                        </el-button>
                     </div>
                 </div>
 

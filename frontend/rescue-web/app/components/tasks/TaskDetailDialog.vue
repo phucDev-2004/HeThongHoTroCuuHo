@@ -1,10 +1,14 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { 
   Close, UserFilled, LocationFilled, Van, Timer, 
-  Tickets, Printer, Phone, MapLocation, Check, Warning, Male, Female
+  Tickets, Printer, Phone, MapLocation, Check, Warning 
 } from '@element-plus/icons-vue';
 import type { RescueTask } from '~/types/task';
+
+// --- IMPORT LEAFLET ---
+import "leaflet/dist/leaflet.css";
+import { LMap, LTileLayer, LMarker, LIcon, LPolyline, LTooltip } from "@vue-leaflet/vue-leaflet";
 
 const props = defineProps<{
   modelValue: boolean;
@@ -41,15 +45,49 @@ const getPeopleSummary = (req: any) => {
   return (req.adults || 0) + (req.children || 0) + (req.elderly || 0);
 };
 
-const openGoogleMap = () => {
-    const lat = props.task?.rescue_request?.latitude;
-    const lng = props.task?.rescue_request?.longitude;
-    if(lat && lng) {
-        window.open(`https://www.google.com/maps/search/?api=1&query=${lat},${lng}`, '_blank');
-    }
-};
-
 const handleClose = () => { visible.value = false; };
+
+// --- LOGIC MAP ---
+const zoom = ref(13);
+const mapCenter = ref<[number, number]>([21.0285, 105.8542]); 
+const mapRef = ref(null);
+
+// 1. Tọa độ Nạn nhân (Luôn hiển thị)
+const victimPos = computed((): [number, number] | null => {
+    if (props.task?.rescue_request?.latitude && props.task?.rescue_request?.longitude) {
+        return [props.task.rescue_request.latitude, props.task.rescue_request.longitude];
+    }
+    return null;
+});
+
+// 2. Tọa độ Đội cứu hộ (LOGIC MỚI: Ẩn khi Hoàn thành)
+const teamPos = computed((): [number, number] | null => {
+    // Nếu trạng thái là 'Hoàn thành' -> Trả về null để ẩn marker và đường nối
+    if (props.task?.status === 'Hoàn thành') {
+        return null;
+    }
+
+    if (props.task?.rescue_team?.team_latitude && props.task?.rescue_team?.team_longitude) {
+        return [props.task.rescue_team.team_latitude, props.task.rescue_team.team_longitude];
+    }
+    return null;
+});
+
+// 3. Đường nối (Tự động ẩn nếu teamPos là null)
+const routeLine = computed(() => {
+    if (victimPos.value && teamPos.value) return [teamPos.value, victimPos.value];
+    return [];
+});
+
+// Tự động focus map
+watch(() => props.modelValue, (val) => {
+    if (val && victimPos.value) {
+        setTimeout(() => {
+            mapCenter.value = victimPos.value as [number, number];
+            window.dispatchEvent(new Event('resize')); 
+        }, 300);
+    }
+});
 </script>
 
 <template>
@@ -101,7 +139,6 @@ const handleClose = () => { visible.value = false; };
       <div class="grid grid-cols-12 gap-5">
          
          <div class="col-span-12 md:col-span-8 flex flex-col gap-5">
-            
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                <div class="px-5 py-3 border-b border-slate-100 flex flex-wrap justify-between items-center bg-slate-50/50 gap-2">
                   <h4 class="font-bold text-slate-700 flex items-center gap-2 text-sm uppercase tracking-wide">
@@ -119,7 +156,6 @@ const handleClose = () => { visible.value = false; };
                      <el-avatar :size="64" class="bg-red-50 text-red-500 text-2xl font-bold shrink-0 border border-red-100 shadow-sm">
                         {{ task.rescue_request?.name?.charAt(0) }}
                      </el-avatar>
-                     
                      <div class="flex-1 min-w-0 flex justify-between items-center gap-4">
                         <div>
                             <h3 class="text-xl font-bold text-slate-800 leading-tight mb-1">{{ task.rescue_request?.name }}</h3>
@@ -156,38 +192,87 @@ const handleClose = () => { visible.value = false; };
                   </div>
 
                   <div class="border-t border-slate-100 my-5"></div>
-
-                  <div>
-                      <div class="flex items-start gap-3 mb-3 bg-slate-50 p-3 rounded-lg border border-slate-200">
-                         <el-icon class="mt-1 text-red-500 shrink-0"><MapLocation /></el-icon>
-                         <div class="text-sm text-slate-800 font-medium leading-relaxed">
-                            {{ task.rescue_request?.address }}
-                         </div>
-                      </div>
-                      
-                      <div @click="openGoogleMap" class="w-full h-32 bg-indigo-50/50 rounded-lg border border-indigo-100 border-dashed border-2 relative overflow-hidden group cursor-pointer flex items-center justify-center transition-all hover:bg-indigo-50">
-                          <div class="text-center group-hover:scale-105 transition-transform duration-300">
-                             <div class="w-10 h-10 bg-white rounded-full flex items-center justify-center text-indigo-600 shadow-sm mx-auto mb-2">
-                                <el-icon :size="20"><LocationFilled /></el-icon>
-                             </div>
-                             <span class="text-xs font-bold text-indigo-600 uppercase tracking-wide">Mở Google Maps chỉ đường</span>
-                             <div class="text-[10px] font-mono text-slate-400 mt-1" v-if="task.rescue_request?.latitude">
-                                {{ task.rescue_request.latitude }}, {{ task.rescue_request.longitude }}
-                             </div>
-                          </div>
+                  
+                  <div class="flex items-start gap-3 mb-3 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                      <el-icon class="mt-1 text-red-500 shrink-0"><MapLocation /></el-icon>
+                      <div class="text-sm text-slate-800 font-medium leading-relaxed">
+                        {{ task.rescue_request?.address }}
                       </div>
                   </div>
                   
+                  <div class="w-full h-80 rounded-xl border border-slate-300 shadow-inner overflow-hidden relative z-0">
+                      <l-map 
+                          ref="mapRef"
+                          v-model:zoom="zoom" 
+                          :center="mapCenter" 
+                          :use-global-leaflet="false"
+                          class="h-full w-full bg-slate-100"
+                      >
+                          <l-tile-layer
+                              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                              layer-type="base"
+                              name="OpenStreetMap"
+                          />
+
+                          <l-marker v-if="victimPos" :lat-lng="victimPos">
+                              <l-icon
+                                  :icon-url="'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png'"
+                                  :shadow-url="'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png'"
+                                  :icon-size="[25, 41]"
+                                  :icon-anchor="[12, 41]"
+                                  :popup-anchor="[1, -34]"
+                                  :shadow-size="[41, 41]"
+                              />
+                              <l-tooltip :options="{permanent: true, direction: 'top', offset: [0, -35]}">
+                                  <div class="font-bold text-red-600">NẠN NHÂN</div>
+                              </l-tooltip>
+                          </l-marker>
+
+                          <l-marker v-if="teamPos" :lat-lng="teamPos">
+                              <l-icon
+                                  :icon-url="'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png'"
+                                  :shadow-url="'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png'"
+                                  :icon-size="[25, 41]"
+                                  :icon-anchor="[12, 41]"
+                                  :popup-anchor="[1, -34]"
+                                  :shadow-size="[41, 41]"
+                              />
+                              <l-tooltip :options="{permanent: true, direction: 'bottom', offset: [0, 5]}">
+                                  <div class="font-bold text-blue-600">ĐỘI CỨU HỘ</div>
+                              </l-tooltip>
+                          </l-marker>
+
+                          <l-polyline
+                              v-if="routeLine.length"
+                              :lat-lngs="routeLine"
+                              color="#3b82f6"
+                              :weight="3"
+                              :opacity="0.6"
+                              dash-array="10, 10"
+                          />
+                      </l-map>
+
+                      <div class="absolute bottom-2 right-2 bg-white/95 p-2 rounded border border-slate-300 shadow-lg text-[11px] z-[1000] flex flex-col gap-1">
+                          <div class="flex items-center gap-1.5">
+                              <img src="https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png" class="w-3">
+                              <span class="font-bold text-slate-700">Vị trí Sự Cố</span>
+                          </div>
+                          <div class="flex items-center gap-1.5" v-if="teamPos">
+                              <img src="https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png" class="w-3">
+                              <span class="font-bold text-slate-700">Đội Cứu Hộ</span>
+                          </div>
+                      </div>
+                  </div>
+
                   <div v-if="task.rescue_request?.description" class="mt-4 p-3 bg-amber-50 text-amber-800 text-sm rounded-lg border border-amber-100 flex gap-2 items-start">
-                     <el-icon class="mt-0.5 text-amber-600"><Warning /></el-icon>
-                     <span><span class="font-bold">Ghi chú từ nạn nhân:</span> "{{ task.rescue_request?.description }}"</span>
+                      <el-icon class="mt-0.5 text-amber-600"><Warning /></el-icon>
+                      <span><span class="font-bold">Ghi chú từ nạn nhân:</span> "{{ task.rescue_request?.description }}"</span>
                   </div>
                </div>
             </div>
          </div>
 
          <div class="col-span-12 md:col-span-4 flex flex-col gap-5">
-            
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                <div class="bg-gradient-to-r from-blue-600 to-blue-500 px-4 py-3 flex items-center gap-2 text-white">
                   <el-icon><Van /></el-icon>
@@ -272,7 +357,6 @@ const handleClose = () => { visible.value = false; };
 </template>
 
 <style>
-/* CSS Tùy chỉnh */
 .task-detail-dialog {
   border-radius: 16px !important;
   overflow: hidden;
@@ -285,4 +369,8 @@ const handleClose = () => { visible.value = false; };
 /* Custom Stepper */
 .custom-steps .el-step__title { font-size: 13px; font-weight: 600; }
 .custom-steps .el-step__icon { width: 32px; height: 32px; }
+
+/* Fix Leaflet tooltip z-index in modal */
+.leaflet-pane { z-index: 10 !important; }
+.leaflet-top, .leaflet-bottom { z-index: 20 !important; }
 </style>

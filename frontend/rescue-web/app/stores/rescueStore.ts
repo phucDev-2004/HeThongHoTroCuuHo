@@ -259,7 +259,7 @@ export const useRescueStore = defineStore('rescue', {
         noti.isRead = true;
 
         // 2. Gọi API background
-        await apiFetch(`/api/notification/read-one/${notiId}`, { method: 'GET' });
+        await apiFetch(`/api/notification/read-one/${notiId}`, { method: 'PATCH' });
         
       } catch (error) {
         console.error('Lỗi API markAsRead:', error);
@@ -278,7 +278,7 @@ export const useRescueStore = defineStore('rescue', {
         this.notifications.forEach((n) => (n.isRead = true));
 
         // 2. Gọi API
-        await apiFetch('/api/notification/read-all', { method: 'GET' });
+        await apiFetch('/api/notification/read-all', { method: 'PATCH' });
 
         // (Optional) Toast thông báo
         // ElMessage.success('Đã đánh dấu tất cả là đã đọc');
