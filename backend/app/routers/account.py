@@ -1,5 +1,5 @@
 from ninja import Router
-from ..schemas.account_schema import AccountResponseSchema, AdminCreateAccountSchema, AccountListResponse, AccountUpdate, AccountSchema
+from ..schemas.account_schema import AccountResponseSchema, AdminCreateAccountSchema, AccountListResponse, AccountUpdate, AccountSchema, AdminAccountUpdate
 from ..schemas.exception_schema import ApiResponse
 from ..services import IAccountService, AccountService
 from app.middleware.auth import JWTBearer
@@ -114,7 +114,7 @@ def update_profile(request, payload: AccountUpdate):
     response={200: ApiResponse[AccountSchema]}
 )
 @require_role(RoleCode.ADMIN)
-def admin_update_user(request, account_id: str, payload: AccountUpdate):
+def admin_update_user(request, account_id: str, payload: AdminAccountUpdate):
     updated = account_service.update_infor(
         current_user=request.auth,
         account_id=account_id,

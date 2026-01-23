@@ -33,6 +33,7 @@ class NearestTeam(Schema):
 class RescueTeamOut(Schema):
     team_id: uuid.UUID
     team_name: str
+    leader_name: str
     team_latitude: Optional[float]
     team_longitude: Optional[float]
     team_phone: Optional[str]

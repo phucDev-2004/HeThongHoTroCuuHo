@@ -14,6 +14,38 @@ from ..services.notification_service import NotificationService, Notification
 
 class AssignService:
 
+    BASE_ASSIGNMENT_SQL = """
+        SELECT
+            ra.id              AS assignment_id,
+            ra.status,
+            ra.assigned_at,
+
+            -- rescue request
+            rr.code,
+            rr.name,
+            rr.contact_phone,
+            rr.adults,
+            rr.children,
+            rr.elderly,
+            rr.address,
+            ST_Y(rr.location)  AS latitude,
+            ST_X(rr.location)  AS longitude,
+            rr.conditions,
+            rr.description,
+
+            -- rescue team
+            rt.id              AS team_id,
+            rt.name            AS team_name,
+            rt.leader_name     AS leader_name,
+            rt.hotline         AS team_phone,
+            ST_Y(rt.location)  AS team_latitude,
+            ST_X(rt.location)  AS team_longitude
+
+        FROM rescue_assignments ra
+        JOIN rescue_requests rr ON rr.id = ra.rescue_request_id
+        JOIN rescue_teams rt ON rt.id = ra.rescue_team_id
+    """
+
     @staticmethod
     def _build_permission(user):
         if user.role.code == RoleCode.ADMIN:
@@ -125,38 +157,8 @@ class AssignService:
 
         where_clause, params = AssignService._build_permission(user)
 
-        BASE_ASSIGNMENT_SQL = """
-            SELECT
-                ra.id              AS assignment_id,
-                ra.status,
-                ra.assigned_at,
-
-                -- rescue request
-                rr.code,
-                rr.name,
-                rr.contact_phone,
-                rr.adults,
-                rr.children,
-                rr.elderly,
-                rr.address,
-                ST_Y(rr.location)  AS latitude,
-                ST_X(rr.location)  AS longitude,
-                rr.conditions,
-                rr.description,
-
-                -- rescue team
-                rt.id              AS team_id,
-                rt.name            AS team_name,
-                rt.hotline         AS team_phone,
-                ST_Y(rt.location)  AS team_latitude,
-                ST_X(rt.location)  AS team_longitude
-
-            FROM rescue_assignments ra
-            JOIN rescue_requests rr ON rr.id = ra.rescue_request_id
-            JOIN rescue_teams rt ON rt.id = ra.rescue_team_id
-        """
         sql = f"""
-            {BASE_ASSIGNMENT_SQL}
+            {AssignService.BASE_ASSIGNMENT_SQL}
             {where_clause}
             ORDER BY ra.created_at DESC
         """
@@ -174,6 +176,36 @@ class AssignService:
                 result.append(AssignService.map_assignment(row_dict))
             return result
     
+    @staticmethod
+    def get_assignment_detail(user, assignment_id: str):
+        """Lấy chi tiết 1 nhiệm vụ"""
+        
+        perm_clause, perm_params = AssignService._build_permission(user)
+
+        if perm_clause:
+            final_where = f"{perm_clause} AND ra.id = %s"
+        else:
+            final_where = "WHERE ra.id = %s"
+        
+        params = perm_params + [assignment_id]
+
+        sql = f"""
+            {AssignService.BASE_ASSIGNMENT_SQL}
+            {final_where}
+        """
+
+        with connection.cursor() as cursor:
+            cursor.execute(sql, params)
+            row = cursor.fetchone()
+            
+            if not row:
+                raise Http404("Không tìm thấy nhiệm vụ hoặc bạn không có quyền truy cập.")
+
+            columns = [col[0] for col in cursor.description]
+            row_dict = dict(zip(columns, row))
+            
+            return AssignService.map_assignment(row_dict)
+
     @staticmethod   
     def map_assignment(row: dict) -> dict:
 
@@ -204,6 +236,7 @@ class AssignService:
             "rescue_team": {
                 "team_id": row["team_id"],
                 "team_name": row["team_name"],
+                "leader_name": row["leader_name"],
                 "team_latitude": row["team_latitude"],
                 "team_longitude": row["team_longitude"],
                 "team_phone": row["team_phone"],

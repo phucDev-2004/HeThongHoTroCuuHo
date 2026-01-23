@@ -135,6 +135,16 @@ def complete_task_endpoint(request, payload: CompleteTaskIn):
     except Exception as e:
         return 400, {"success": False, "message": str(e)}
 
+@router.get("/assignments/{assignment_id}", response=AssignmentOut, auth=auth_bearer)
+def assignment_detail(request, assignment_id: str):
+    """
+    Lấy chi tiết một nhiệm vụ theo ID.
+    - Admin: Xem được bất kỳ nhiệm vụ nào.
+    - Rescuer: Chỉ xem được nhiệm vụ của đội mình.
+    """
+    user = request.auth
+    task = AssignService.get_assignment_detail(user=user, assignment_id=assignment_id)
+    return task
 
 @router.delete("/assignments/{assignment_id}", auth=auth_bearer, response={200: dict, 400: dict, 404: dict})
 def delete_assignment(request, assignment_id: str):
