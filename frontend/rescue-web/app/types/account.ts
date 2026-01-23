@@ -4,7 +4,7 @@ export interface Role {
 }
 
 export interface Account {
-    id: number;
+    id: string;
     email: string;
     phone?: string;
     role: Role;

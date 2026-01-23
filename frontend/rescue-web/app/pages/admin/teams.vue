@@ -247,8 +247,8 @@ onMounted(fetchTeams);
                     <el-input v-model="currentTeam.address" :prefix-icon="House" type="textarea" :rows="2" placeholder="Địa chỉ chi tiết..." />
                 </el-form-item>
 
-                <el-divider content-position="left">Cấu hình Vị trí & Trạng thái</el-divider>
-
+                <!-- <el-divider content-position="left">Cấu hình Vị trí & Trạng thái</el-divider> -->
+<!-- 
                 <el-row :gutter="20">
                     <el-col :span="8">
                         <el-form-item label="Vĩ độ (Latitude)" prop="latitude">
@@ -277,7 +277,7 @@ onMounted(fetchTeams);
                             </el-select>
                         </el-form-item>
                     </el-col>
-                </el-row>
+                </el-row> -->
 
             </el-form>
             

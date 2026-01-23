@@ -63,6 +63,24 @@ export const useApiClient = () => {
       throw error;
     }
   };
+  const refreshUserToken = async () => {
+    try {
+      // Gọi API refresh (cookie HttpOnly tự gửi đi)
+      const res = await $fetch<any>('/api/auth/refresh', {
+        baseURL: config.public.apiBase,
+        method: 'POST',
+        credentials: 'include',
+      });
+      
+      // Cập nhật Cookie mới ngay lập tức
+      accessToken.value = res.access_token;
+      return res.access_token;
+    } catch (e) {
+      // Nếu lỗi quá nặng (refresh token cũng hết hạn) -> Logout
+      accessToken.value = null;
+      throw e;
+    }
+  };
 
-  return { apiFetch };
+  return { apiFetch, refreshUserToken };
 };

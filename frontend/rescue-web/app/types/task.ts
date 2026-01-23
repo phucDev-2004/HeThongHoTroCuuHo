@@ -16,6 +16,7 @@ export interface RescueRequest {
 export interface RescueTeam {
   team_id: string;
   team_name: string;
+  leader_name: string;
   team_latitude: number;
   team_longitude: number;
   team_phone: string;

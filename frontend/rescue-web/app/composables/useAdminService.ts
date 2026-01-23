@@ -28,6 +28,13 @@ export const useAdminService = () => {
         });
     };
 
+    const updateAccount = async (id: string, payload: any) => {
+        return await apiFetch(`/api/${id}`, {
+            method: 'PUT',
+            body: payload
+        });
+    };
+
     // Khóa/Mở khóa tài khoản
     const toggleActive = async (id: number, isActive: boolean) => {
         return await apiFetch(`/api/admin/account/lock/${id}`, {
@@ -69,6 +76,7 @@ export const useAdminService = () => {
     return {
         getAccounts,
         createAccount,
+        updateAccount,
         toggleActive,
         toggleUnActive,
         getTeams,

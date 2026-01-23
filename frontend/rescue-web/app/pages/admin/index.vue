@@ -117,7 +117,29 @@ const getStatusText = (status: string) => {
 }
 
 const navigateToDetail = (id: string) => {
-  router.push(`/admin/incidents`);
+  router.push({ path: '/admin/incidents', query: { id: id } });
+};
+
+// pages/index.vue
+
+const handleLogClick = (log: AppNotification) => {
+    if (log.type === 'new_request') {
+        router.push({ path: '/admin/incidents', query: { id: log.relatedId } });
+        return;
+    }
+
+    const taskId = log.taskId || (log as any).data?.task_id || (log as any).meta?.task_id || (log as any).task_id;
+    if (taskId) {
+        router.push({ 
+            path: '/admin/tasks', 
+            query: { taskId: taskId } 
+        });
+    } else {
+        router.push({ 
+            path: '/admin/tasks', 
+            query: { requestId: log.relatedId } 
+        });
+    }
 };
 
 // --- DATA FETCHING ---
@@ -259,7 +281,7 @@ onMounted(() => {
           <div class="flex-1 overflow-y-auto p-4 scrollbar-thin">
              <TransitionGroup name="list" tag="div" class="relative border-l border-slate-700 ml-2 space-y-6 pb-2">
                 
-                <div v-for="log in notifications" :key="log.id" class="ml-6 relative group">
+                <div v-for="log in notifications" :key="log.id" class="ml-6 relative group cursor-pointer" @click="handleLogClick(log)">
                    
                    <span class="absolute -left-[35px] flex h-8 w-8 items-center justify-center rounded-full border ring-4 ring-slate-800 transition-transform group-hover:scale-110" 
                          :class="getLogStyle(log).color">

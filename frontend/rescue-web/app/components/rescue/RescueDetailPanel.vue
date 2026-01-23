@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { InfoFilled, MapLocation } from '@element-plus/icons-vue';
-import type { RescueRequest } from '@/types/rescue';
+import type { RescueRequest, RescueTeam } from '@/types/rescue'; // Import thêm type RescueTeam nếu cần
 import { ElMessage } from 'element-plus';
 
-// Import 3 components con
+// 1. Giả sử hàm findNearbyTeams nằm trong useRescueService (hoặc bạn import từ nơi chứa nó)
+import { useRescueService } from '@/composables/useRescueService'; 
+
 import RescueMap from './RescueMap.vue';
 import RescueInfo from './RescueInfo.vue';
 import RescueTaskControl from './RescueTaskControl.vue';
@@ -15,22 +17,51 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits(['refresh']);
-const showDispatchDialog = ref(false);
 
-const handleOpenDispatch = () => {
+// 2. Lấy hàm API và khởi tạo state
+const { findNearbyTeams } = useRescueService();
+const showDispatchDialog = ref(false);
+const suggestedTeams = ref<RescueTeam[]>([]); // Biến chứa danh sách đội
+const loadingTeams = ref(false); // Biến loading
+
+// 3. Hàm xử lý khi bấm nút "Điều động"
+const handleOpenDispatch = async () => {
     if (!props.request) return;
+
+    // Reset state cũ
     showDispatchDialog.value = true;
+    suggestedTeams.value = []; 
+    loadingTeams.value = true;
+
+    try {
+        // Kiểm tra xem request có tọa độ không
+        if (!props.request.latitude || !props.request.longitude) {
+            ElMessage.warning('Yêu cầu này không có tọa độ để tìm đội lân cận.');
+            loadingTeams.value = false;
+            return;
+        }
+
+        // 4. Gọi API findNearbyTeams với tham số
+        const teams = await findNearbyTeams({
+            latitude: props.request.latitude,
+            longitude: props.request.longitude,
+            radius_km: 10 // Bán kính mặc định 10km (hoặc cấu hình tùy ý)
+        });
+
+        suggestedTeams.value = teams;
+
+    } catch (error) {
+        console.error("Lỗi tìm đội:", error);
+        ElMessage.error('Không thể tải danh sách đội cứu hộ.');
+    } finally {
+        loadingTeams.value = false;
+    }
 };
 
 const onAssignSuccess = () => {
     ElMessage.success('Điều động thành công!');
     showDispatchDialog.value = false;
-    emit('refresh'); // Báo cho cha reload list
-};
-
-const handleCancelTask = () => {
-    // Gọi API hủy task ở đây...
-    console.log("Hủy task");
+    emit('refresh');
 };
 </script>
 
@@ -64,8 +95,7 @@ const handleCancelTask = () => {
             <RescueTaskControl 
                 :request="request"
                 @openDispatch="handleOpenDispatch"
-                @cancelTask="handleCancelTask"
-            />
+                @refresh="$emit('refresh')" />
         </div>
 
         <div v-else class="flex-1 flex flex-col items-center justify-center text-slate-400 p-8 text-center bg-slate-50/50">
@@ -76,6 +106,8 @@ const handleCancelTask = () => {
         <RescueDispatch
             v-model="showDispatchDialog"
             :request="request"
+            :teams="suggestedTeams"
+            :loading="loadingTeams"
             @success="onAssignSuccess"
         />
     </div>

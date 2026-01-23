@@ -1,4 +1,4 @@
-<script setup lang="ts">
+<!-- <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue';
 import { 
     InfoFilled, UserFilled, PhoneFilled, MapLocation, 
@@ -385,4 +385,4 @@ onMounted(() => {
     background-color: #cbd5e1;
     border-radius: 20px;
 }
-</style>
+</style> -->

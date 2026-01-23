@@ -11,6 +11,7 @@ export default defineNuxtConfig({
   ],
   app: {
     head: {
+      title: 'Quản lý Cứu Hộ - RescueLink Admin',
       link: [
         { rel: 'stylesheet', href: 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css' }
       ]

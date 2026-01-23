@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import { useNuxtApp, useCookie } from '#app';
 import type { MapItem, MapBounds, MapPoint } from '~/types/map';
 import type { AppNotification, NotificationEventType } from '~/types/notification';
+import { useApiClient } from '@/composables/useApiClient';
 
 export const useRescueStore = defineStore('rescue', {
   state: () => ({
@@ -69,6 +70,8 @@ export const useRescueStore = defineStore('rescue', {
                else if (meta.status === 'ARRIVED') subStatus = 'ARRIVED';
            }
 
+           const taskId = item.task_id || meta.task_id;
+
            return {
              id: item.id,
              type: item.type as NotificationEventType,
@@ -77,6 +80,7 @@ export const useRescueStore = defineStore('rescue', {
              time: new Date(item.created_at),
              isRead: item.is_read,
              relatedId: meta.id || meta.request_id || meta.task_id,
+             taskId: taskId,
              subStatus: subStatus,
              lat: meta.latitude ? parseFloat(meta.latitude) : undefined,
              lng: meta.longitude ? parseFloat(meta.longitude) : undefined,
@@ -147,9 +151,32 @@ export const useRescueStore = defineStore('rescue', {
         this.socketStatus = 'CLOSED';
         this.socket = null;
         if (e.code !== 1000) {
-           this.reconnectTimer = setTimeout(() => this.connectWebSocket(), 3000);
+           this.handleSocketReconnect();
         }
       };
+    },
+
+    async handleSocketReconnect() {
+        if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+
+        console.log('⏳ Chuẩn bị kết nối lại sau 3s...');
+
+        this.reconnectTimer = setTimeout(async () => {
+            try {
+                // Bước A: Gọi Refresh Token TRƯỚC
+                console.log('🔄 Đang làm mới token cho Socket...');
+                const { refreshUserToken } = useApiClient();
+                await refreshUserToken();
+                
+                console.log('✅ Token đã được làm mới. Đang kết nối lại...');
+            } catch (error) {
+                console.error("❌ Lỗi refresh token (có thể session hết hạn hẳn):", error);
+                return; 
+            }
+
+            this.connectWebSocket();
+
+        }, 3000);
     },
 
     // --- 4. XỬ LÝ SỰ KIỆN REALTIME ---
@@ -161,7 +188,7 @@ export const useRescueStore = defineStore('rescue', {
       console.log('⚡ WS Received:', eventName, data);
 
       const reqId = data.request_id || data.id;
-
+      
       // A. CẬP NHẬT MAP
       // 1. Thêm mới
       if (eventName === 'new_request') {
@@ -186,8 +213,8 @@ export const useRescueStore = defineStore('rescue', {
           const idx = this.points.findIndex((p) => 'id' in p && p.id === reqId);
           if (idx !== -1) {
             const point = this.points[idx] as MapPoint;
-            if (data.status) point.status = data.status; 
-            // Update toạ độ xe nếu có
+            const status = payload.status || data.status;
+            if (status) point.status = status;
             if(data.latitude && data.longitude) {
                 point.latitude = parseFloat(data.latitude);
                 point.longitude = parseFloat(data.longitude);
@@ -202,17 +229,18 @@ export const useRescueStore = defineStore('rescue', {
 
       // B. TẠO THÔNG BÁO MỚI
       let title = 'Thông báo';
-      let message = data.msg || data.message || '';
+      let message = payload.msg || data.msg || data.message || '';
       let subStatus: AppNotification['subStatus'] = undefined;
+      const status = payload.status || data.status;
 
       switch (eventName) {
         case 'new_request':
           title = '🆘 Yêu cầu cứu hộ mới';
-          message = `${data.name} tại ${data.address}`;
+          if (!message) message = `${data.name} tại ${data.address}`;
           break;
         case 'new_task':
           title = 'Phân công nhiệm vụ';
-          message = data.msg || 'Đội cứu hộ đã nhận nhiệm vụ.';
+          if (!message) message = 'Đội cứu hộ đã nhận nhiệm vụ.';
           subStatus = 'ASSIGNED';
           break;
         case 'task_update':
@@ -231,7 +259,7 @@ export const useRescueStore = defineStore('rescue', {
         type: eventName, 
         title: title,
         message: message,
-        time: new Date(),
+        time: new Date(payload.time || payload.timestamp || Date.now()),
         isRead: false,
         relatedId: reqId,
         subStatus: subStatus,

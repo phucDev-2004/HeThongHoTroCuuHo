@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'; // Import thêm computed
 import { useRoute, useRouter } from 'vue-router';
+import { ref, onMounted, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { 
   Monitor, List, User, Setting, FirstAidKit,
@@ -34,7 +34,7 @@ onMounted( async () => {
   // 1. Kết nối WebSocket để nghe tin mới
   rescueStore.connectWebSocket();
   // 2. (Optional) Gọi API lấy danh sách thông báo cũ nếu cần
-  // rescueStore.fetchNotifications(); 
+  rescueStore.fetchNotifications(); 
 });
 
 // --- HELPER UI ---
@@ -56,17 +56,30 @@ const getNotifStyle = (item: AppNotification) => {
 };
 
 
-// Xử lý khi click vào thông báo
 const handleNotificationClick = async (item: AppNotification) => {
   if (!item.isRead) {
     await rescueStore.markAsRead(item.id);
   }
-  // Điều hướng logic giữ nguyên
-  if (item.relatedId) {
-      if (item.type === 'new_request') router.push(`/admin/incidents`);
-      else router.push(`/admin/tasks`);
+  if (item.type === 'new_request') {
+      // CASE 1: Sự cố mới -> Sang trang Incidents & mở chi tiết
+      if (item.relatedId) {
+          router.push({ 
+              path: '/admin/incidents', 
+              query: { id: item.relatedId } 
+          });
+      }
+  } else {
+      const taskId = item.taskId || (item as any).data?.task_id || (item as any).meta?.task_id;
+
+      if (taskId) {
+          router.push({ 
+              path: '/admin/tasks', 
+              query: { taskId: taskId } 
+          });
+      } 
   }
 };
+
 
 const handleLoadMore = async () => {
     await rescueStore.fetchNotifications(true); // true = load more

@@ -1,5 +1,5 @@
 // composables/useRescueService.ts
-import type { RescueResponse, RescueFilter, FindTeamParams, RescueTeam, AssignTeam } from '~/types/rescue';
+import type { RescueRequest, RescueResponse, RescueFilter, FindTeamParams, RescueTeam, AssignTeam } from '~/types/rescue';
 import type { RescueTask } from '~/types/task';
 
 export const useRescueService = () => {
@@ -13,6 +13,12 @@ export const useRescueService = () => {
         return await apiFetch<RescueResponse>(RESOURCE, {
             method: 'GET',
             params: filter // apiFetch tự động serialize object thành query param
+        });
+    };
+
+    const getRequestDetail = async (id: string): Promise<RescueRequest> => {
+        return await apiFetch<RescueRequest>(`${RESOURCE}/${id}`, {
+            method: 'GET'
         });
     };
 
@@ -61,14 +67,23 @@ export const useRescueService = () => {
         return await apiFetch<any>('/api/dashboard/status'); 
     };
 
+    // 3. Lấy chi tiết 1 nhiệm vụ theo ID
+    const getAssignmentById = async (id: string): Promise<RescueTask> => {
+        return await apiFetch<RescueTask>(`/api/rescue-teams/assignments/${id}`, {
+            method: 'GET'
+        });
+    };
+
 
     return {
         getAll,
+        getRequestDetail,
         updateStatus,
         findNearbyTeams,
         assignTeam,
         getAssignments,
         cancelAssignment,
-        getDashboardStats
+        getDashboardStats,
+        getAssignmentById
     };
 };

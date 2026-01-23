@@ -13,7 +13,7 @@ export interface AppNotification {
   message: string;
   time: Date;
   isRead: boolean;
-  
+  taskId?: string;
   relatedId: string;
   subStatus?: 'IN_PROGRESS' | 'ARRIVED' | 'COMPLETED' | 'ASSIGNED'; 
 

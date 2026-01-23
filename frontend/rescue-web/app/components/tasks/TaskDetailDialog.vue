@@ -13,6 +13,7 @@ import { LMap, LTileLayer, LMarker, LIcon, LPolyline, LTooltip } from "@vue-leaf
 const props = defineProps<{
   modelValue: boolean;
   task: RescueTask | null;
+  loading?: boolean;
 }>();
 
 const emit = defineEmits(['update:modelValue']);
@@ -92,6 +93,8 @@ watch(() => props.modelValue, (val) => {
 
 <template>
   <el-dialog 
+    :model-value="modelValue"
+    @update:model-value="handleClose"
     v-model="visible" 
     width="960px" 
     destroy-on-close 

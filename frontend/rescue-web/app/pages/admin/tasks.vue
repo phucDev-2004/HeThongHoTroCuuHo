@@ -9,6 +9,13 @@ import TaskDetailDialog from '~/components/tasks/TaskDetailDialog.vue';
 
 definePageMeta({ layout: 'admin' });
 
+const route = useRoute();
+const router = useRouter();
+const loading = ref(false);
+const tasks = ref([]);
+
+const { getAssignmentById } = useRescueService();
+
 const { 
   filteredTasks, pending, error, refresh,
   searchQuery, statusFilter,
@@ -17,15 +24,70 @@ const {
 
 // State quản lý Dialog
 const detailVisible = ref(false);
+const detailLoading = ref(false);
 const selectedTask = ref<RescueTask | null>(null);
 
 // Hàm mở Dialog
-const openDetail = (task: RescueTask) => {
-  selectedTask.value = task;
+const openDetail = async (task: RescueTask) => {
+  // 1. Mở dialog ngay để tạo phản hồi UI
   detailVisible.value = true;
+  detailLoading.value = true;
+  
+  selectedTask.value = null;
+
+  try {
+    // 2. Gọi API lấy chi tiết mới nhất
+    const fullDetail = await getAssignmentById(task.id);
+    selectedTask.value = fullDetail;
+  } catch (error) {
+    console.error("Lỗi tải chi tiết:", error);
+    ElNotification.error({
+      title: 'Lỗi',
+      message: 'Không thể tải thông tin chi tiết nhiệm vụ.'
+    });
+    detailVisible.value = false;
+  } finally {
+    detailLoading.value = false;
+  }
 };
 
-// --- UI HELPER FUNCTIONS ---
+const fetchTasks = async () => {
+  loading.value = true;
+  try {
+    console.log('Đang tải danh sách nhiệm vụ...'); 
+    await new Promise(resolve => setTimeout(resolve, 500));
+  } catch (e) {
+    console.error(e);
+  } finally {
+    loading.value = false;
+  }
+};
+const handleSearch = () => {
+  // Logic tìm kiếm: reset trang về 1 và gọi lại fetchTasks
+  fetchTasks();
+};
+
+onMounted(async () => {
+    // 1. Vẫn tải danh sách nền bên dưới để nhìn cho đẹp
+    await fetchTasks();
+
+    // 2. Kiểm tra URL xem có taskId không
+    const targetTaskId = route.query.taskId as string; // <--- Đổi thành taskId cho rõ nghĩa
+    
+    if (targetTaskId) {
+        // THAY VÌ SEARCH, GỌI HÀM MỞ DIALOG LUÔN
+        // Ta tạo một object giả chỉ chứa ID để truyền vào hàm openDetail
+        // Vì hàm openDetail chỉ cần task.id để gọi API getAssignmentById
+        openDetail({ id: targetTaskId } as RescueTask);
+        
+        // Xóa query trên URL
+        router.replace({ query: {} });
+    } 
+    // Nếu chỉ có requestId (trường hợp cũ) thì vẫn search như thường
+    else if (route.query.requestId) {
+        searchQuery.value = route.query.requestId as string;
+    }
+});
 
 // 1. Map trạng thái sang màu sắc & Icon
 const getStatusMeta = (status: string) => {

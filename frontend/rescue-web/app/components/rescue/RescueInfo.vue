@@ -5,8 +5,19 @@ import type { RescueRequest } from '@/types/rescue';
 
 const props = defineProps<{ request: RescueRequest }>();
 
-// --- XỬ LÝ MEDIA ---
-const MEDIA_BASE_URL = 'http://localhost:8000/media/'; 
+const getMediaBaseUrl = () => {
+    // Check môi trường Browser
+    if (typeof window !== 'undefined') {
+        // Nếu chạy trên server thật
+        if (window.location.hostname === 'cuuho.vpone.site') {
+            return 'https://cuuho.vpone.site/media/';
+        }
+    }
+    // Mặc định cho Localhost
+    return 'http://localhost:8000/media/';
+};
+
+const MEDIA_BASE_URL = getMediaBaseUrl();
 
 const getFullUrl = (path: string) => {
     if (!path) return '';

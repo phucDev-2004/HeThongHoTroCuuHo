@@ -1,34 +1,79 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue';
 import { useRescue } from '@/composables/useRescue';
+import { useRescueService } from '@/composables/useRescueService'; // 1. Import Service
 import type { RescueRequest } from '@/types/rescue';
+import { Loading } from '@element-plus/icons-vue'; // Import icon loading
+
+import { useRoute, useRouter } from 'vue-router';
 
 import RescueFilter from '@/components/rescue/RescueFilter.vue';
 import RescueTable from '@/components/rescue/RescueTable.vue';
-// import RescueDetail from '@/components/rescue/RescueDetail.vue';
 import RescueDetailPanel from '~/components/rescue/RescueDetailPanel.vue';
 
 definePageMeta({ layout: 'admin' });
 
+const route = useRoute();
+const router = useRouter();
+
+// Lấy logic danh sách từ useRescue
 const { 
-    requests, loading, total, filter, 
+    requests, loading: loadingList, total, filter, // Đổi tên loading -> loadingList để tránh nhầm
     fetchRequests, handleSearch, handleReset 
 } = useRescue();
 
-const selectedRequest = ref<RescueRequest | null>(null);
+// Lấy hàm gọi chi tiết từ Service
+const { getRequestDetail } = useRescueService();
 
-const onSelectRequest = (row: RescueRequest) => {
-    selectedRequest.value = row;
+const selectedRequest = ref<RescueRequest | null>(null);
+const loadingDetail = ref(false); // 2. State loading cho vùng chi tiết
+
+// 3. Hàm xử lý khi click row (Async gọi API)
+const onSelectRequest = async (row: RescueRequest) => {
+    // Reset data cũ để tránh hiển thị thông tin rác của người trước
+    selectedRequest.value = null; 
+    loadingDetail.value = true;
+
+    try {
+        // Gọi API lấy thông tin tươi mới nhất (bao gồm media, trạng thái đội...)
+        const fullDetail = await getRequestDetail(row.id);
+        selectedRequest.value = fullDetail;
+    } catch (e) {
+        console.error("Lỗi tải chi tiết:", e);
+        // Fallback: Nếu lỗi API thì dùng tạm dữ liệu từ bảng
+        selectedRequest.value = row;
+    } finally {
+        loadingDetail.value = false;
+    }
 };
 
-watch(requests, (newRequests) => {
-    if (newRequests && newRequests.length > 0 && !selectedRequest.value) {
-        selectedRequest.value = newRequests[0]!;
+// 4. Xử lý Refresh (Ví dụ sau khi điều phối xong)
+const onRefreshData = () => {
+    // Load lại danh sách
+    fetchRequests();
+    // Nếu đang chọn ai đó, load lại chi tiết người đó luôn
+    if (selectedRequest.value) {
+        onSelectRequest(selectedRequest.value);
     }
+};
+
+// Tự động chọn dòng đầu tiên khi mới vào trang (Có gọi API chi tiết)
+watch(requests, async (newRequests) => {
+  if (newRequests && newRequests.length > 0 && !selectedRequest.value) {
+    await onSelectRequest(newRequests[0]!);
+  }
 });
 
-onMounted(() => {
-    fetchRequests();
+onMounted(async () => {
+    // 1. Tải danh sách mặc định
+    await fetchRequests();
+    const queryId = route.query.id as string;
+    
+    if (queryId) {
+        await onSelectRequest({ id: queryId } as RescueRequest);
+
+        router.replace({ query: {} }); 
+    }
 });
 </script>
 
@@ -57,7 +102,7 @@ onMounted(() => {
                 <div class="flex-1 overflow-hidden">
                     <RescueTable 
                         :data="requests"
-                        :loading="loading"
+                        :loading="loadingList"
                         @select="onSelectRequest"
                     />
                 </div>
@@ -75,8 +120,19 @@ onMounted(() => {
             </div>
         </div>
 
-        <div class="lg:col-span-4 h-full overflow-hidden">
-            <RescueDetailPanel :request="selectedRequest" />
+        <div class="lg:col-span-4 h-full overflow-hidden relative">
+            
+            <div v-if="loadingDetail" class="absolute inset-0 z-50 bg-white/60 backdrop-blur-sm flex items-center justify-center rounded-xl border border-slate-100">
+                <div class="flex flex-col items-center gap-3">
+                    <el-icon class="is-loading text-blue-600" :size="32"><Loading /></el-icon>
+                    <span class="text-sm font-medium text-slate-500">Đang tải thông tin...</span>
+                </div>
+            </div>
+
+            <RescueDetailPanel 
+                :request="selectedRequest" 
+                @refresh="onRefreshData" 
+            />
         </div>
         
     </div>
