@@ -22,7 +22,7 @@ jobs:
       - name: Build and Push Backend
         uses: docker/build-push-action@v4
         with:
-          context: ./backend # ⚠️ Đảm bảo đúng tên thư mục chứa code Django
+          context: ./backend
           push: true
           tags: ${{ secrets.DOCKER_USERNAME }}/rescuevn-backend:latest
 
@@ -30,7 +30,7 @@ jobs:
       - name: Build and Push Frontend
         uses: docker/build-push-action@v4
         with:
-          context: ./frontend/rescue-web # ⚠️ Đảm bảo đúng tên thư mục chứa code Nuxt
+          context: ./frontend/rescue-web
           push: true
           tags: ${{ secrets.DOCKER_USERNAME }}/rescuevn-frontend:latest
 
@@ -46,19 +46,19 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_KEY }}
           script: |
-            # Vào thư mục dự án (Lát nữa ở Step 4 mình sẽ tạo thư mục này)
+            # Vào thư mục dự án
             mkdir -p /opt/rescuevn
             cd /opt/rescuevn
 
-            # Pull image mới về (Lấy từ Docker Hub nên cực nhanh và nhẹ)
+            # Pull image mới về (Lấy từ Docker Hub)
             docker compose pull
 
-            # Restart các service (Chỉ cái nào đổi mới bị restart)
+            # Restart các service (chỉ cái nào đổi mới bị restart)
             docker compose up -d
 
             # Chạy migrate database (Chỉ chạy cho backend)
             # Dùng || true để nếu không có thay đổi gì thì cũng không báo lỗi
             docker compose exec -T backend python manage.py migrate || true
 
-            # Dọn dẹp rác image cũ (tiết kiệm ổ cứng VPS)
+            # Dọn dẹp rác image cũ
             docker image prune -f
