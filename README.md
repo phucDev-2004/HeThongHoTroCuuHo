@@ -18,13 +18,13 @@ Nền tảng tích hợp để quản lý và điều phối các yêu cầu c�
 
 ### ✨ Tính Năng Chính
 
-- ✅ Quản lý yêu cầu cứu hộ
-- ✅ Cập nhật real-time qua WebSocket
-- ✅ Định vị GPS và địa chỉ tự động
-- ✅ Gửi hình ảnh/media
-- ✅ Đăng nhập Google OAuth
-- ✅ Phân công đội cứu hộ
-- ✅ Bản đồ tương tác hiển thị vị trí
+- ✅ **Tạo & Quản lý yêu cầu cứu hộ** - Người dùng có thể gọi cứu hộ với chi tiết về vị trí và tình trạng
+- ✅ **Theo dõi yêu cầu real-time** - Cập nhật trạng thái tức thì qua WebSocket (chưa xử lý → đã nhận → đang xử lý → hoàn thành)
+- ✅ **Tự động định vị GPS** - Lấy tọa độ và địa chỉ tự động từ điện thoại người dùng
+- ✅ **Chia sẻ hình ảnh/video** - Upload ảnh hiện trường giúp đội cứu hộ nắm tình huống
+- ✅ **Đăng nhập bằng Google** - Xác thực nhanh chóng qua tài khoản Google
+- ✅ **Phân công tự động cho đội cứu hộ** - Admin gán yêu cầu đến đội gần nhất
+- ✅ **Xem bản đồ tương tác** - Hiển thị vị trí yêu cầu trên bản đồ
 
 ---
 
@@ -134,8 +134,8 @@ DELETE /api/requests/{id}
 ### Teams
 
 ```
-GET    /api/rescue_team
-PATCH  /api/rescue_team/{id}
+GET    /api/rescue-team
+PATCH  /api/rescue-team/{id}
 POST   /api/rescue-teams/assign
 ```
 
@@ -171,7 +171,7 @@ REDIS_HOST=localhost
 REDIS_PORT=6379
 
 ALLOWED_HOSTS=cuuho.vpone.site,localhost
-CORS_ALLOWED_ORIGINS=https://cuuho.vpone.site
+CORS_ALLOWED_ORIGINS=https://cuuho.vpone.site,http://localhost:3000,http://127.0.0.1:3000
 ```
 
 ### Frontend (`.env`)
@@ -194,21 +194,6 @@ docker compose logs -f
 ```
 
 **Services**: Backend, Frontend, PostgreSQL, Redis, Nginx
-
----
-
-## 🧪 Testing
-
-```bash
-# Backend
-cd backend && python manage.py test
-
-# Web Frontend
-cd frontend/rescue-web && npm run test
-
-# Mobile
-cd frontend/app-mobile && flutter test
-```
 
 ---
 
