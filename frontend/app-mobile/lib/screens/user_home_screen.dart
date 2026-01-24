@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../services/auth_service.dart';
+import '../services/websocket_service.dart';
 import 'user_profile_screen.dart';
 import 'sos_form_screen.dart';
+import 'notification_screen.dart';
 
 class UserHomeScreen extends StatefulWidget {
   const UserHomeScreen({super.key});
@@ -15,9 +18,14 @@ class _UserHomeScreenState extends State<UserHomeScreen> with TickerProviderStat
   int _currentIndex = 0;
   bool _isPressed = false;
   double _pressProgress = 0.0;
-
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
+
+  final WebSocketService _wsService = WebSocketService();
+  final FlutterLocalNotificationsPlugin _notificationsPlugin = FlutterLocalNotificationsPlugin();
+
+  String? _rescueStatusMessage;
+  String? _rescuerName;
 
   @override
   void initState() {
@@ -26,27 +34,65 @@ class _UserHomeScreenState extends State<UserHomeScreen> with TickerProviderStat
       vsync: this,
       duration: const Duration(seconds: 2),
     )..repeat(reverse: false);
-
     _pulseAnimation = Tween<double>(begin: 1.0, end: 1.3).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeOut),
     );
+
+    _initNotifications();
+    _connectWebSocket();
+  }
+
+  Future<void> _initNotifications() async {
+    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const iosSettings = DarwinInitializationSettings();
+    const settings = InitializationSettings(android: androidSettings, iOS: iosSettings);
+    await _notificationsPlugin.initialize(settings);
+  }
+
+  Future<void> _showNotification(String title, String body) async {
+    const androidDetails = AndroidNotificationDetails(
+        'rescue_channel', 'Cập nhật cứu hộ',
+        importance: Importance.max, priority: Priority.high, playSound: true
+    );
+    const details = NotificationDetails(android: androidDetails);
+    await _notificationsPlugin.show(0, title, body, details);
+  }
+
+  void _connectWebSocket() {
+    _wsService.onMessageReceived = (data) {
+      String message = data['message'] ?? "Có cập nhật mới";
+      String status = data['status'] ?? "";
+
+      if (mounted) {
+        setState(() {
+          _rescueStatusMessage = message;
+          if (data['rescuer_name'] != null) {
+            _rescuerName = data['rescuer_name'];
+          }
+          if (status == 'COMPLETED') {
+            Future.delayed(const Duration(seconds: 10), () {
+              if(mounted) setState(() => _rescueStatusMessage = null);
+            });
+          }
+        });
+      }
+      _showNotification("Thông báo cứu hộ", message);
+    };
+    _wsService.connect();
   }
 
   @override
   void dispose() {
     _pulseController.dispose();
+    _wsService.disconnect();
     super.dispose();
   }
 
-  // --- LOGIC GỌI ĐIỆN HOTLINE ---
   Future<void> _callHotline(String number) async {
     final Uri launchUri = Uri(scheme: 'tel', path: number);
-    if (await canLaunchUrl(launchUri)) {
-      await launchUrl(launchUri);
-    }
+    if (await canLaunchUrl(launchUri)) await launchUrl(launchUri);
   }
 
-  // --- LOGIC SOS (GIỮ NGUYÊN) ---
   void _onSOSPressed() {
     setState(() { _isPressed = false; _pressProgress = 0.0; });
     Navigator.push(context, MaterialPageRoute(builder: (context) => const SOSFormScreen()));
@@ -63,12 +109,11 @@ class _UserHomeScreenState extends State<UserHomeScreen> with TickerProviderStat
   }
 
   void _stopHolding() {
-    if (_pressProgress < 1.0) {
-      setState(() { _isPressed = false; _pressProgress = 0.0; });
-    }
+    if (_pressProgress < 1.0) setState(() { _isPressed = false; _pressProgress = 0.0; });
   }
 
   void _logout() {
+    _wsService.disconnect();
     AuthService.logout();
     Navigator.pushReplacementNamed(context, '/login');
   }
@@ -80,20 +125,46 @@ class _UserHomeScreenState extends State<UserHomeScreen> with TickerProviderStat
 
     return Scaffold(
       backgroundColor: Colors.white,
-
-      // BODY CHỈ CHỨA TRANG CHỦ (Vì Lịch sử & Tài khoản sẽ chuyển trang khác)
       body: Column(
         children: [
-          // 1. HEADER HIỆN ĐẠI
           _buildModernHeader(user),
-
           Expanded(
             child: SingleChildScrollView(
               child: Column(
                 children: [
-                  const SizedBox(height: 30),
+                  // --- HIỂN THỊ TRẠNG THÁI CỨU HỘ LIVE ---
+                  if (_rescueStatusMessage != null)
+                    Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.blue.shade200),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.notifications_active, color: Colors.blue, size: 30),
+                            const SizedBox(width: 15),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text("CẬP NHẬT TỪ ĐỘI CỨU HỘ", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.blue)),
+                                  const SizedBox(height: 4),
+                                  Text(_rescueStatusMessage!, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: Colors.black87)),
+                                  if (_rescuerName != null)
+                                    Text("Cán bộ: $_rescuerName", style: const TextStyle(fontSize: 13, color: Colors.grey)),
+                                ],
+                              ),
+                            )
+                          ],
+                        ),
+                      ),
+                    ),
 
-                  // 2. NÚT SOS (Đã fix lỗi nhảy layout)
+                  const SizedBox(height: 20),
                   SizedBox(
                     width: 300, height: 300,
                     child: GestureDetector(
@@ -153,12 +224,9 @@ class _UserHomeScreenState extends State<UserHomeScreen> with TickerProviderStat
                       ),
                     ),
                   ),
-
                   const SizedBox(height: 20),
                   Text("Gửi tín hiệu SOS kèm vị trí đến đội cứu hộ", style: TextStyle(color: Colors.grey[600], fontSize: 14)),
                   const SizedBox(height: 40),
-
-                  // 3. KHU VỰC HOTLINE (Mới)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Column(
@@ -184,24 +252,18 @@ class _UserHomeScreenState extends State<UserHomeScreen> with TickerProviderStat
           ),
         ],
       ),
-
-      // THANH ĐIỀU HƯỚNG - KHÔI PHỤC LOGIC CŨ CỦA BẠN
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
         backgroundColor: Colors.white,
         indicatorColor: Colors.red.withOpacity(0.1),
         onDestinationSelected: (index) {
-          // KHÔI PHỤC LOGIC CŨ Ở ĐÂY:
           if (index == 1) {
-            // Chuyển sang màn hình Lịch sử có sẵn của bạn
             Navigator.pushNamed(context, '/user-history');
           } else if (index == 2) {
-            // Chuyển sang màn hình Tài khoản
             Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => const UserProfileScreen())
             ).then((_) {
-              // Khi quay lại từ trang Profile, reset tab về 0 (Trang chủ)
               setState(() => _currentIndex = 0);
             });
           }
@@ -226,8 +288,6 @@ class _UserHomeScreenState extends State<UserHomeScreen> with TickerProviderStat
       ),
     );
   }
-
-  // --- WIDGET CON (Giữ nguyên cho đẹp) ---
 
   Widget _buildModernHeader(Map<String, dynamic>? user) {
     return Container(
@@ -256,7 +316,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> with TickerProviderStat
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Xin chào, ${user?['name'] ?? 'Bạn'}!', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+                Text('Xin chào, ${user?['full_name'] ?? 'Bạn'}!', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
                 const SizedBox(height: 4),
                 const Row(
                   children: [
@@ -268,14 +328,33 @@ class _UserHomeScreenState extends State<UserHomeScreen> with TickerProviderStat
               ],
             ),
           ),
-          IconButton(
-            onPressed: _logout,
-            icon: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle),
-              child: const Icon(Icons.logout, color: Colors.white, size: 18),
-            ),
-          ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                onPressed: () {
+                  Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const NotificationScreen())
+                  );
+                },
+                icon: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle),
+                  child: const Icon(Icons.notifications_none, color: Colors.white, size: 20),
+                ),
+              ),
+              const SizedBox(width: 4),
+              IconButton(
+                onPressed: _logout,
+                icon: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle),
+                  child: const Icon(Icons.logout, color: Colors.white, size: 20),
+                ),
+              ),
+            ],
+          )
         ],
       ),
     );

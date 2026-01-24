@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart'; // Import Notification
 import '../services/assign_service.dart';
-import '../models/assignment.dart';
 import '../services/auth_service.dart';
+import '../services/websocket_service.dart'; // Import WebSocket Service
+import '../models/assignment.dart';
 import 'rescuer_profile_screen.dart';
+import 'notification_screen.dart'; // Import màn hình thông báo (dùng chung hoặc tạo mới)
+import '../services/location_service.dart';
 
 class RescuerDashboardScreen extends StatefulWidget {
   const RescuerDashboardScreen({super.key});
@@ -23,15 +27,90 @@ class _RescuerDashboardScreenState extends State<RescuerDashboardScreen> {
   int _totalCompleted = 0;
   int _totalCancelled = 0;
 
-  // Giả lập số thông báo (Sau này bạn bind data thật vào đây)
-  int _unreadNotifications = 2;
+  // Notification & WebSocket State
+  int _unreadNotifications = 0; // Sẽ cập nhật từ API hoặc Socket
+  final WebSocketService _wsService = WebSocketService();
+  final FlutterLocalNotificationsPlugin _notificationsPlugin = FlutterLocalNotificationsPlugin();
 
   @override
   void initState() {
     super.initState();
-    _loadAssignments();
+    _initNotifications(); // Cấu hình thông báo
+    _connectWebSocket();  // Kết nối Socket
+    _loadAssignments();   // Load dữ liệu ban đầu
   }
 
+  // --- 1. CẤU HÌNH LOCAL NOTIFICATION ---
+  Future<void> _initNotifications() async {
+    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const iosSettings = DarwinInitializationSettings();
+    const settings = InitializationSettings(android: androidSettings, iOS: iosSettings);
+    await _notificationsPlugin.initialize(settings);
+  }
+
+  Future<void> _showNotification(String title, String body) async {
+    const androidDetails = AndroidNotificationDetails(
+      'rescue_mission_channel', 'Nhiệm vụ cứu hộ',
+      importance: Importance.max,
+      priority: Priority.high,
+      playSound: true,
+      styleInformation: BigTextStyleInformation(''), // Để hiện text dài
+    );
+    const details = NotificationDetails(android: androidDetails);
+    await _notificationsPlugin.show(DateTime.now().millisecond, title, body, details);
+  }
+
+  // --- 2. KẾT NỐI WEBSOCKET ---
+  void _connectWebSocket() {
+    // Lắng nghe tin nhắn từ Server
+    _wsService.onMessageReceived = (data) {
+      // Giả sử server gửi: { "type": "new_mission", "message": "Có nhiệm vụ cứu hộ mới tại Q1" }
+      String type = data['type'] ?? '';
+      String message = data['message'] ?? 'Bạn có thông báo mới';
+
+      // Xử lý Logic khi có Nhiệm vụ mới
+      if (type == 'new_mission' || type == 'new_request') {
+        _showNotification("NHIỆM VỤ KHẨN CẤP 🚨", message);
+
+        // Reload lại danh sách ngay lập tức để hiện nhiệm vụ mới
+        _loadAssignments();
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("🚨 $message"),
+              backgroundColor: Colors.redAccent,
+              duration: const Duration(seconds: 5),
+              action: SnackBarAction(
+                label: "XEM NGAY",
+                textColor: Colors.white,
+                onPressed: () => _loadAssignments(),
+              ),
+            ),
+          );
+        }
+      } else {
+        // Các thông báo thường khác
+        _showNotification("Thông báo", message);
+      }
+
+      // Tăng số thông báo chưa đọc (ảo)
+      if (mounted) {
+        setState(() => _unreadNotifications++);
+      }
+    };
+
+    // Bắt đầu kết nối
+    _wsService.connect();
+  }
+
+  @override
+  void dispose() {
+    _wsService.disconnect(); // Ngắt kết nối khi thoát màn hình
+    super.dispose();
+  }
+
+  // --- LOGIC LOAD DATA (Giữ nguyên) ---
   Future<void> _loadAssignments() async {
     setState(() => _isLoading = true);
     try {
@@ -52,10 +131,8 @@ class _RescuerDashboardScreenState extends State<RescuerDashboardScreen> {
           _historyList = data
               .where((t) => ['completed', 'cancelled'].contains(t.status))
               .toList();
-          _totalCompleted =
-              _historyList.where((t) => t.status == 'completed').length;
-          _totalCancelled =
-              _historyList.where((t) => t.status == 'cancelled').length;
+          _totalCompleted = _historyList.where((t) => t.status == 'completed').length;
+          _totalCancelled = _historyList.where((t) => t.status == 'cancelled').length;
         });
       }
     } catch (e) {
@@ -65,17 +142,23 @@ class _RescuerDashboardScreenState extends State<RescuerDashboardScreen> {
     }
   }
 
-  // Logic gọi API update nhanh ngay tại Dashboard
   Future<void> _quickUpdateStatus(String action) async {
     if (_currentTask == null) return;
     setState(() => _isLoading = true);
 
     try {
+      // 1. Lấy vị trí hiện tại (Thêm đoạn này)
+      final position = await LocationService.getRescueLocation();
+      double lat = position.latitude;
+      double lng = position.longitude;
+
       bool success = false;
+
+      // 2. Gọi Service với tham số GPS
       if (action == 'start') {
-        success = await AssignService.confirmStart(_currentTask!.id);
+        success = await AssignService.confirmStart(_currentTask!.id, lat, lng);
       } else if (action == 'arrived') {
-        success = await AssignService.confirmArrived(_currentTask!.id);
+        success = await AssignService.confirmArrived(_currentTask!.id, lat, lng);
       }
 
       if (success && mounted) {
@@ -85,7 +168,12 @@ class _RescuerDashboardScreenState extends State<RescuerDashboardScreen> {
         _loadAssignments();
       }
     } catch (e) {
-      print(e);
+      print("Lỗi update status: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text("Lỗi: $e"), // Thường là lỗi chưa bật GPS
+            backgroundColor: Colors.red));
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -122,21 +210,11 @@ class _RescuerDashboardScreenState extends State<RescuerDashboardScreen> {
   }
 
   void _openMap(double lat, double lng) async {
-    // Sử dụng đường dẫn chuẩn của Google Maps:
-    // api=1: Phiên bản API
-    // query: Tọa độ điểm đến
-    final Uri googleMapsUrl = Uri.parse(
-        "https://www.google.com/maps/search/?api=1&query=$lat,$lng");
-
-    // Nếu muốn mở thẳng chế độ CHỈ ĐƯỜNG (Navigation) thì dùng link này:
-    // final Uri googleMapsUrl = Uri.parse("https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=driving");
-
+    final Uri googleMapsUrl = Uri.parse("https://www.google.com/maps/search/?api=1&query=$lat,$lng?q=$lat,$lng");
     try {
-      // Thêm mode: LaunchMode.externalApplication để buộc mở bằng App Google Maps (nếu có) thay vì mở trong Webview của app
       if (await canLaunchUrl(googleMapsUrl)) {
         await launchUrl(googleMapsUrl, mode: LaunchMode.externalApplication);
       } else {
-        // Fallback: Nếu không mở được app, thử mở bằng trình duyệt mặc định
         await launchUrl(googleMapsUrl);
       }
     } catch (e) {
@@ -147,6 +225,7 @@ class _RescuerDashboardScreenState extends State<RescuerDashboardScreen> {
   }
 
   void _logout() {
+    _wsService.disconnect(); // Ngắt socket trước khi logout
     AuthService.logout();
     Navigator.pushReplacementNamed(context, '/login');
   }
@@ -155,13 +234,9 @@ class _RescuerDashboardScreenState extends State<RescuerDashboardScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
-      // Bỏ AppBar mặc định, dùng Body full màn hình để vẽ Header Custom
       body: Column(
         children: [
-          // 1. HEADER MỚI (Gradient + Avatar + Thông báo)
           _buildCustomHeader(),
-
-          // 2. PHẦN NỘI DUNG CUỘN BÊN DƯỚI
           Expanded(
             child: RefreshIndicator(
               onRefresh: _loadAssignments,
@@ -171,14 +246,10 @@ class _RescuerDashboardScreenState extends State<RescuerDashboardScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Đẩy nội dung xuống một chút để Stats Box đè lên Header (hiệu ứng 3D)
                     const SizedBox(height: 20),
-
-                    // Thống kê (Floating Box)
                     _buildSummaryStats(),
                     const SizedBox(height: 30),
 
-                    // NHIỆM VỤ ĐANG CHẠY
                     if (_currentTask != null) ...[
                       Row(
                         children: [
@@ -196,7 +267,6 @@ class _RescuerDashboardScreenState extends State<RescuerDashboardScreen> {
                       const SizedBox(height: 30),
                     ],
 
-                    // LỊCH SỬ
                     Row(
                       children: [
                         const Icon(Icons.history, color: Colors.grey, size: 20),
@@ -219,7 +289,6 @@ class _RescuerDashboardScreenState extends State<RescuerDashboardScreen> {
                         itemCount: _historyList.length,
                         itemBuilder: (ctx, i) => _buildHistoryCard(_historyList[i]),
                       ),
-
                     const SizedBox(height: 40),
                   ],
                 ),
@@ -231,7 +300,7 @@ class _RescuerDashboardScreenState extends State<RescuerDashboardScreen> {
     );
   }
 
-  // --- NEW HEADER WIDGET ---
+  // --- HEADER ĐÃ CẬP NHẬT NÚT THÔNG BÁO ---
   Widget _buildCustomHeader() {
     return Container(
       padding: const EdgeInsets.only(top: 50, left: 20, right: 20, bottom: 30),
@@ -256,17 +325,12 @@ class _RescuerDashboardScreenState extends State<RescuerDashboardScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // AVATAR & INFO (Update Info)
           InkWell(
             onTap: () {
-              // --- SỬA ĐỔI TẠI ĐÂY ---
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => const RescuerProfileScreen()),
-              ).then((_) {
-                // Load lại data khi quay về (đề phòng user đổi tên)
-                _loadAssignments();
-              });
+              ).then((_) => _loadAssignments());
             },
             child: Row(
               children: [
@@ -312,15 +376,23 @@ class _RescuerDashboardScreenState extends State<RescuerDashboardScreen> {
             ),
           ),
 
-          // ACTIONS (Noti & Logout)
           Row(
             children: [
-              // Thông báo
+              // Nút Thông Báo (Đã gắn sự kiện)
               Stack(
                 children: [
                   IconButton(
                     icon: const Icon(Icons.notifications_outlined, color: Colors.white),
-                    onPressed: () {},
+                    onPressed: () {
+                      // Reset số thông báo khi bấm vào
+                      setState(() => _unreadNotifications = 0);
+
+                      // Chuyển sang màn hình danh sách thông báo
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const NotificationScreen()),
+                      );
+                    },
                   ),
                   if (_unreadNotifications > 0)
                     Positioned(
@@ -332,7 +404,6 @@ class _RescuerDashboardScreenState extends State<RescuerDashboardScreen> {
                     )
                 ],
               ),
-              // Đăng xuất
               IconButton(
                 icon: const Icon(Icons.logout, color: Colors.white70),
                 onPressed: _logout,
@@ -344,7 +415,7 @@ class _RescuerDashboardScreenState extends State<RescuerDashboardScreen> {
     );
   }
 
-  // --- STATS WIDGET (Modified Style) ---
+  // --- CÁC WIDGET CON KHÁC GIỮ NGUYÊN ---
   Widget _buildSummaryStats() {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 10),
@@ -387,7 +458,6 @@ class _RescuerDashboardScreenState extends State<RescuerDashboardScreen> {
     );
   }
 
-  // --- TASK CARD (Keep user logic, slightly refined UI) ---
   Widget _buildActiveTaskCard(Assignment task) {
     String btnText = "XUẤT PHÁT";
     Color themeColor = Colors.orange;
@@ -422,7 +492,6 @@ class _RescuerDashboardScreenState extends State<RescuerDashboardScreen> {
         ),
         child: Column(
           children: [
-            // Header Card
             Container(
               padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
               decoration: BoxDecoration(
@@ -494,7 +563,6 @@ class _RescuerDashboardScreenState extends State<RescuerDashboardScreen> {
                   const SizedBox(height: 20),
                   Row(
                     children: [
-                      // Nút Gọi
                       Expanded(
                         child: SizedBox(
                           height: 48,
@@ -512,7 +580,6 @@ class _RescuerDashboardScreenState extends State<RescuerDashboardScreen> {
                         ),
                       ),
                       const SizedBox(width: 12),
-                      // Nút Map
                       SizedBox(
                         height: 48,
                         width: 48,
@@ -529,7 +596,6 @@ class _RescuerDashboardScreenState extends State<RescuerDashboardScreen> {
                         ),
                       ),
                       const SizedBox(width: 12),
-                      // Nút Hành động chính
                       Expanded(
                         flex: 2,
                         child: SizedBox(

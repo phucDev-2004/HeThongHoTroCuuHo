@@ -4,6 +4,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/assign_service.dart';
+import '../services/location_service.dart';
 
 class RescueRequestDetailScreen extends StatefulWidget {
   final Map<String, dynamic> request;
@@ -34,33 +35,75 @@ class _RescueRequestDetailScreenState extends State<RescueRequestDetailScreen> {
     bool success = false;
 
     try {
-      if (action == 'start') {
-        success = await AssignService.confirmStart(assignmentId);
-        if (success) setState(() => _currentStatus = 'in_progress');
-      } else if (action == 'arrived') {
-        success = await AssignService.confirmArrived(assignmentId);
-        if (success) setState(() => _currentStatus = 'arrived');
-      } else if (action == 'complete') {
-        final note = await _showCompletionDialog();
-        if (note != null) {
-          success = await AssignService.completeTask(assignmentId, note);
-          if (success) setState(() => _currentStatus = 'completed');
-        } else {
+      // BIẾN LƯU TỌA ĐỘ
+      double currentLat = 0;
+      double currentLng = 0;
+
+      // 1. XỬ LÝ RIÊNG CHO "COMPLETE" (Cần nhập Note trước)
+      String? note;
+      if (action == 'complete') {
+        note = await _showCompletionDialog();
+        if (note == null) {
+          // Người dùng bấm Hủy -> Dừng lại, không lấy GPS
           setState(() => _isLoading = false);
           return;
         }
       }
 
+      // 2. LẤY VỊ TRÍ GPS (Chỉ chạy khi người dùng đã xác nhận hành động)
+      try {
+        final position = await LocationService.getRescueLocation();
+        currentLat = position.latitude;
+        currentLng = position.longitude;
+      } catch (e) {
+        // Nếu lỗi GPS (ví dụ chưa bật), báo lỗi và dừng lại
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Lỗi vị trí: $e"),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      // 3. GỌI API VỚI TỌA ĐỘ
+      if (action == 'start') {
+        success = await AssignService.confirmStart(assignmentId, currentLat, currentLng);
+        if (success) setState(() => _currentStatus = 'in_progress');
+
+      } else if (action == 'arrived') {
+        success = await AssignService.confirmArrived(assignmentId, currentLat, currentLng);
+        if (success) setState(() => _currentStatus = 'arrived');
+
+      } else if (action == 'complete') {
+        // Lúc này biến 'note' chắc chắn đã có dữ liệu
+        success = await AssignService.completeTask(assignmentId, note!, currentLat, currentLng);
+        if (success) setState(() => _currentStatus = 'completed');
+      }
+
+      // 4. XỬ LÝ KẾT QUẢ
       if (success && mounted) {
         _hasChanged = true;
         ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Cập nhật thành công!")));
+            const SnackBar(content: Text("Cập nhật thành công!"), backgroundColor: Colors.green));
 
         if (action == 'complete') Navigator.pop(context, true);
-
+      } else {
+        // Trường hợp API trả về false (do server lỗi hoặc logic sai)
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("Lỗi cập nhật từ Server"), backgroundColor: Colors.red));
+        }
       }
+
     } catch (e) {
-      print(e);
+      print("System Error: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Lỗi hệ thống"), backgroundColor: Colors.red));
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

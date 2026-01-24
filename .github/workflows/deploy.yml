@@ -2,7 +2,7 @@ name: Deploy RescueVN System
 
 on:
   push:
-    branches: ["deloy"] # Chạy khi có code push lên nhánh main
+    branches: ["deloy"]
 
 jobs:
   # JOB 1: BUILD VÀ ĐẨY IMAGE LÊN DOCKER HUB

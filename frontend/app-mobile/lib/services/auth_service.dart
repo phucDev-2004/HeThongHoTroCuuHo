@@ -3,22 +3,19 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:jwt_decoder/jwt_decoder.dart';
-import 'package:flutter/foundation.dart';
-import 'package:google_sign_in/google_sign_in.dart'; // 1. Import thêm cái này
+import 'package:google_sign_in/google_sign_in.dart';
 import '../configs/api_config.dart';
 
 class AuthService {
   static Map<String, dynamic>? _currentUser;
 
-  // Cấu hình Google Sign In
-  // LƯU Ý: Nếu bạn cấu hình thủ công trên Google Cloud Console,
-  // bạn có thể cần thêm tham số `serverClientId` vào đây để lấy được idToken hợp lệ.
   static final GoogleSignIn _googleSignIn = GoogleSignIn(
+    // ID này của bạn, giữ nguyên
     clientId: '456997668692-6o22fr9o1gg6rhl3qrcn8i7f49te90b7.apps.googleusercontent.com',
     scopes: ['email', 'profile'],
   );
 
-  // --- API ĐĂNG KÝ (Giữ nguyên) ---
+  // --- API ĐĂNG KÝ ---
   static Future<bool> register(String name, String phone, String password) async {
     try {
       final url = Uri.parse('${ApiConfig.baseUrl}/api/auth/register');
@@ -31,19 +28,14 @@ class AuthService {
           "password": password
         }),
       );
-
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        return true;
-      } else {
-        return false;
-      }
+      return response.statusCode == 200 || response.statusCode == 201;
     } catch (e) {
       print("Lỗi đăng ký: $e");
       return false;
     }
   }
 
-  // --- API ĐĂNG NHẬP THƯỜNG (Giữ nguyên logic) ---
+  // --- API ĐĂNG NHẬP THƯỜNG ---
   static Future<bool> login(String email, String password) async {
     try {
       final response = await http.post(
@@ -55,12 +47,9 @@ class AuthService {
         }),
       );
 
-      print("Login Status: ${response.statusCode}");
-
       if (response.statusCode == 200 || response.statusCode == 201) {
-        return await _saveUserData(response.body); // Gọi hàm lưu chung
+        return await _saveUserData(response.body);
       } else {
-        print('Đăng nhập thất bại: ${response.body}');
         return false;
       }
     } catch (e) {
@@ -69,74 +58,53 @@ class AuthService {
     }
   }
 
-  // --- API ĐĂNG NHẬP GOOGLE (MỚI) ---
+  // --- API ĐĂNG NHẬP GOOGLE ---
   static Future<bool> loginWithGoogle() async {
     try {
-      // 1. Trigger Popup đăng nhập
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+      if (googleUser == null) return false;
 
-      if (googleUser == null) {
-        print("Người dùng hủy đăng nhập.");
-        return false;
-      }
-
-      // 2. Lấy thông tin xác thực
       final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
-
-      // --- LOGIC QUAN TRỌNG NHẤT: TỰ ĐỘNG CHỌN TOKEN ---
-      // Nếu có idToken (Android) thì dùng. Nếu null (Web) thì dùng accessToken.
       final String? tokenToSend = googleAuth.idToken ?? googleAuth.accessToken;
 
-      print("Token gửi đi Backend: $tokenToSend");
+      if (tokenToSend == null) return false;
 
-      if (tokenToSend == null) {
-        print("Lỗi: Không lấy được bất kỳ token nào.");
-        return false;
-      }
-
-      // 3. Gửi về Backend
       final response = await http.post(
         Uri.parse('${ApiConfig.baseUrl}/api/auth/google'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'token': tokenToSend,
-        }),
+        body: jsonEncode({'token': tokenToSend}),
       );
 
-      print("Backend Status: ${response.statusCode}");
-
-      // 4. Xử lý kết quả
       if (response.statusCode == 200 || response.statusCode == 201) {
         return await _saveUserData(response.body);
       } else {
-        print("Lỗi từ Backend: ${response.body}");
         return false;
       }
     } catch (e) {
-      print("Lỗi Exception Google: $e");
+      print("Lỗi Google Login: $e");
       return false;
     }
   }
 
-  // --- HÀM PHỤ: XỬ LÝ LƯU DỮ LIỆU (Dùng chung cho cả 2 cách đăng nhập) ---
+  // --- HÀM LƯU DỮ LIỆU (ĐÃ SỬA KEY CHO KHỚP WS) ---
   static Future<bool> _saveUserData(String responseBody) async {
     try {
-
       final Map<String, dynamic> data = jsonDecode(responseBody);
 
+      // API trả về cấu trúc nào thì lấy đúng key đó
+      // Nếu API trả về { "token": { "access_token": "..." } }
       final accessToken = data['token']['access_token'];
 
       if (accessToken == null) return false;
 
-      // 1. Giải mã Token để lấy Role
       Map<String, dynamic> decodedToken = JwtDecoder.decode(accessToken);
       String role = decodedToken['role_account'] ?? 'USER';
 
-      // 2. Lưu token vào máy
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('auth_token', accessToken);
 
-      // 3. Xử lý hiển thị tên
+      // ⚠️ SỬA QUAN TRỌNG: Đổi 'auth_token' thành 'access_token'
+      await prefs.setString('access_token', accessToken);
+
       String displayName = 'Người dùng';
       if (data['full_name'] != null && data['full_name'].toString().isNotEmpty) {
         displayName = data['full_name'];
@@ -144,7 +112,6 @@ class AuthService {
         displayName = data['email'].toString().split('@')[0];
       }
 
-      // 4. Lưu thông tin user
       final userInfoToSave = {
         'id': data['id'],
         'full_name': displayName,
@@ -155,27 +122,29 @@ class AuthService {
 
       await prefs.setString('user_info', jsonEncode(userInfoToSave));
       _currentUser = userInfoToSave;
-
-      print("Đăng nhập thành công! Role: $role");
       return true;
     } catch (e) {
-      print("Lỗi khi lưu dữ liệu user: $e");
+      print("Lỗi lưu user: $e");
       return false;
     }
   }
 
-  // --- HÀM ĐĂNG XUẤT ---
+  // --- ĐĂNG XUẤT (SỬA KEY) ---
   static Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.clear();
-    await _googleSignIn.signOut(); // Đăng xuất cả Google để lần sau nó hỏi lại tài khoản
+    // ⚠️ Xóa đúng key
+    await prefs.remove('access_token');
+    await prefs.remove('user_info');
+
+    await _googleSignIn.signOut();
     _currentUser = null;
   }
 
-  // ... (Các hàm getter cũ giữ nguyên) ...
+  // --- LẤY TOKEN (SỬA KEY) ---
   static Future<String?> getToken() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('auth_token');
+    // ⚠️ Lấy đúng key
+    return prefs.getString('access_token');
   }
 
   static Map<String, dynamic>? getCurrentUser() {
@@ -185,7 +154,9 @@ class AuthService {
   static Future<void> loadUserFromStorage() async {
     final prefs = await SharedPreferences.getInstance();
     final userInfo = prefs.getString('user_info');
-    final token = prefs.getString('auth_token');
+
+    // ⚠️ Lấy đúng key
+    final token = prefs.getString('access_token');
 
     if (token != null && userInfo != null) {
       if (JwtDecoder.isExpired(token)) {

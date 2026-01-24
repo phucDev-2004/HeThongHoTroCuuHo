@@ -34,38 +34,57 @@ class AssignService {
   }
 
   // 2. XÁC NHẬN XUẤT PHÁT
-  static Future<bool> confirmStart(String assignmentId) async {
+  static Future<bool> confirmStart(String assignmentId, double lat, double lng) async {
     final url = Uri.parse('${ApiConfig.baseUrl}/api/rescue-teams/task/start');
     try {
       final response = await http.post(
         url,
         headers: await _getHeaders(),
-        body: jsonEncode({'assignment_id': assignmentId}),
+        body: jsonEncode({
+          'assignment_id': assignmentId,
+          'latitude': lat,
+          'longitude': lng,
+        }),
       );
+      if (response.statusCode != 200) {
+        print("Start Error: ${response.body}");
+      }
       return response.statusCode == 200;
     } catch (e) {
+      print("Error confirmStart: $e");
       return false;
     }
   }
 
   // 3. XÁC NHẬN ĐẾN NƠI
-  static Future<bool> confirmArrived(String assignmentId) async {
-    final url = Uri.parse('${ApiConfig.baseUrl}/api/rescue-teams/task/arrived');
+  static Future<bool> confirmArrived
+  (String assignmentId, double lat, double lng) async {
+    final url = Uri.parse(
+        '${ApiConfig.baseUrl}/api/rescue-teams/task/arrived');
     try {
       final response = await http.post(
         url,
         headers: await _getHeaders(),
-        body: jsonEncode({'assignment_id': assignmentId}), // Body dùng chung schema ConfirmStartIn
+        body: jsonEncode({
+          'assignment_id': assignmentId,
+          'latitude': lat,
+          'longitude': lng,
+        }),
       );
+      if (response.statusCode != 200) {
+        print("Arrived Error: ${response.body}");
+      }
       return response.statusCode == 200;
     } catch (e) {
+      print("Error confirmArrived: $e");
       return false;
     }
   }
 
   // 4. HOÀN THÀNH NHIỆM VỤ
-  static Future<bool> completeTask(String assignmentId, String note) async {
-    final url = Uri.parse('${ApiConfig.baseUrl}/api/rescue-teams/task/complete');
+  static Future<bool> completeTask(String assignmentId, String note, double lat, double lng) async {
+    final url = Uri.parse(
+        '${ApiConfig.baseUrl}/api/rescue-teams/task/complete');
     try {
       final response = await http.post(
         url,
@@ -73,10 +92,17 @@ class AssignService {
         body: jsonEncode({
           'assignment_id': assignmentId,
           'outcome_note': note,
+          'latitude': lat,
+          'longitude': lng,
         }),
       );
+
+      if (response.statusCode != 200) {
+        print("Complete Error: ${response.body}");
+      }
       return response.statusCode == 200;
     } catch (e) {
+      print("Error completeTask: $e");
       return false;
     }
   }

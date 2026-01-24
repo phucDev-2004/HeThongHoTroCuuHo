@@ -12,6 +12,8 @@ import './location_picker_screen.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
+import 'dart:convert'; // Để dùng jsonDecode
+import 'package:shared_preferences/shared_preferences.dart';
 
 class SOSFormScreen extends StatefulWidget {
   const SOSFormScreen({super.key});
@@ -46,7 +48,8 @@ class _SOSFormScreenState extends State<SOSFormScreen> {
   String? _address;
 
   final List<String> _selectedConditions = [];
-  final List<XFile> _selectedImages = []; // Dùng XFile cho cả Web & Mobile
+  final List<XFile> _selectedImages = [];
+  final List<XFile> _selectedVideos = [];
 
   bool _isLoadingLocation = false;
   bool _isSubmitting = false;
@@ -73,11 +76,40 @@ class _SOSFormScreenState extends State<SOSFormScreen> {
     super.dispose();
   }
 
-  void _loadUserInfo() {
-    final user = AuthService.getCurrentUser();
-    if (user != null) {
-      _nameController.text = user['name'] ?? '';
-      _phoneController.text = user['phone'] ?? '';
+  Future<void> _loadUserInfo() async {
+    try {
+      // 1. Kết nối tới bộ nhớ máy
+      final prefs = await SharedPreferences.getInstance();
+
+      // 2. Lấy chuỗi JSON với key là 'user_info' (Key này khớp với AuthService bạn gửi)
+      final String? userDataString = prefs.getString('user_info');
+
+      if (userDataString != null) {
+        // 3. Giải mã chuỗi JSON thành Map
+        final Map<String, dynamic> user = jsonDecode(userDataString);
+
+        // 4. Lấy dữ liệu (Dùng đúng key mà AuthService đã lưu)
+        String initialName = user['full_name'] ?? '';
+        String initialPhone = user['phone'] ?? '';
+        String email = user['email'] ?? '';
+
+        // Logic: Nếu tên chưa có, lấy email làm tên tạm
+        if (initialName.trim().isEmpty) {
+          initialName = email;
+        }
+
+        // 5. Cập nhật giao diện
+        if (mounted) {
+          setState(() {
+            _nameController.text = initialName;
+            _phoneController.text = initialPhone;
+          });
+        }
+      } else {
+        print("Chưa tìm thấy dữ liệu user_info trong bộ nhớ");
+      }
+    } catch (e) {
+      print("Lỗi khi load thông tin user: $e");
     }
   }
 
@@ -190,6 +222,25 @@ class _SOSFormScreenState extends State<SOSFormScreen> {
     }
   }
 
+  Future<void> _pickVideo() async {
+    final ImagePicker picker = ImagePicker();
+    // Chọn video từ Gallery hoặc Camera (ở đây mình ưu tiên Camera cho cứu hộ)
+    final XFile? video = await picker.pickVideo(
+      source: ImageSource.camera,
+      maxDuration: const Duration(seconds: 30), // Giới hạn 30s để upload cho nhanh
+    );
+
+    if (video != null) {
+      setState(() {
+        _selectedVideos.add(video);
+      });
+    }
+  }
+
+  void _removeVideo(int index) {
+    setState(() => _selectedVideos.removeAt(index));
+  }
+
   void _removeMedia(int index) {
     setState(() => _selectedImages.removeAt(index));
   }
@@ -242,9 +293,11 @@ class _SOSFormScreenState extends State<SOSFormScreen> {
       final newRequestId = await RequestService.createRequest(newRequest);
 
       if (newRequestId != null) {
+        List<XFile> allMediaFiles = [..._selectedImages, ..._selectedVideos];
         // 2. Upload Ảnh (Nếu có)
-        if (_selectedImages.isNotEmpty) {
-          await RequestService.uploadMedia(newRequestId, _selectedImages);
+        if (allMediaFiles.isNotEmpty) {
+          // Gọi hàm upload
+          await RequestService.uploadMedia(newRequestId, allMediaFiles);
         }
 
         if (mounted) {
@@ -603,19 +656,28 @@ class _SOSFormScreenState extends State<SOSFormScreen> {
   }
 
   Widget _buildImageCard() {
+    // Tạo list tạm để render: gồm cả ảnh và video
+    int imageCount = _selectedImages.length;
+    int videoCount = _selectedVideos.length;
+    int totalCount = imageCount + videoCount;
+
     return _buildCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (_selectedImages.isNotEmpty)
+          if (totalCount > 0)
             Container(
               height: 110,
               margin: const EdgeInsets.only(bottom: 16),
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
-                itemCount: _selectedImages.length,
+                itemCount: totalCount,
                 separatorBuilder: (_, __) => const SizedBox(width: 12),
                 itemBuilder: (ctx, index) {
+                  // Logic xác định item hiện tại là Ảnh hay Video
+                  bool isImage = index < imageCount;
+                  int realIndex = isImage ? index : index - imageCount;
+
                   return Stack(
                     clipBehavior: Clip.none,
                     children: [
@@ -625,19 +687,43 @@ class _SOSFormScreenState extends State<SOSFormScreen> {
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(color: Colors.grey.shade200),
+                          color: Colors.grey.shade100,
                         ),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(12),
-                          child: _displayImage(_selectedImages[index]),
+                          // Nếu là Ảnh -> Hiện ảnh
+                          // Nếu là Video -> Hiện icon Video (để đỡ nặng app phải load thumbnail)
+                          child: isImage
+                              ? _displayImage(_selectedImages[realIndex])
+                              : const Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.videocam_rounded, color: Colors.red, size: 40),
+                                Text("Video", style: TextStyle(fontSize: 10))
+                              ],
+                            ),
+                          ),
                         ),
                       ),
+                      // Nút Xóa
                       Positioned(
                         top: -8, right: -8,
                         child: GestureDetector(
-                          onTap: () => _removeMedia(index),
+                          onTap: () {
+                            if (isImage) {
+                              _removeMedia(realIndex);
+                            } else {
+                              _removeVideo(realIndex);
+                            }
+                          },
                           child: Container(
                             padding: const EdgeInsets.all(4),
-                            decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle, boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4)]),
+                            decoration: const BoxDecoration(
+                                color: Colors.red,
+                                shape: BoxShape.circle,
+                                boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4)]
+                            ),
                             child: const Icon(Icons.close, color: Colors.white, size: 14),
                           ),
                         ),
@@ -648,19 +734,37 @@ class _SOSFormScreenState extends State<SOSFormScreen> {
               ),
             ),
 
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: _pickImage,
-              icon: const Icon(Icons.camera_alt),
-              label: const Text('Thêm ảnh / Chụp ảnh'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: _primaryColor,
-                side: BorderSide(color: _primaryColor),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          // Hai nút bấm: Thêm Ảnh & Quay Video
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _pickImage,
+                  icon: const Icon(Icons.camera_alt),
+                  label: const Text('Chụp Ảnh'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: _primaryColor,
+                    side: BorderSide(color: _primaryColor),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
               ),
-            ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _pickVideo,
+                  icon: const Icon(Icons.videocam),
+                  label: const Text('Quay Video'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.blue.shade800,
+                    side: BorderSide(color: Colors.blue.shade800),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
+            ],
           )
         ],
       ),

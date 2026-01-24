@@ -3,9 +3,69 @@ import 'package:intl/intl.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:video_player/video_player.dart'; // Import mới
+import 'package:chewie/chewie.dart'; // Import mới
 import '../services/request_service.dart';
 import '../configs/api_config.dart';
 
+// --- WIDGET PHÁT VIDEO RIÊNG (THÊM MỚI VÀO CUỐI FILE) ---
+class SimpleVideoPlayerScreen extends StatefulWidget {
+  final String videoUrl;
+  const SimpleVideoPlayerScreen({super.key, required this.videoUrl});
+
+  @override
+  State<SimpleVideoPlayerScreen> createState() => _SimpleVideoPlayerScreenState();
+}
+
+class _SimpleVideoPlayerScreenState extends State<SimpleVideoPlayerScreen> {
+  late VideoPlayerController _videoPlayerController;
+  ChewieController? _chewieController;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializePlayer();
+  }
+
+  Future<void> _initializePlayer() async {
+    _videoPlayerController = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl));
+    await _videoPlayerController.initialize();
+
+    setState(() {
+      _chewieController = ChewieController(
+        videoPlayerController: _videoPlayerController,
+        autoPlay: true,
+        looping: false,
+        aspectRatio: _videoPlayerController.value.aspectRatio,
+        errorBuilder: (context, errorMessage) {
+          return Center(child: Text(errorMessage, style: const TextStyle(color: Colors.white)));
+        },
+      );
+    });
+  }
+
+  @override
+  void dispose() {
+    _videoPlayerController.dispose();
+    _chewieController?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(backgroundColor: Colors.transparent, iconTheme: const IconThemeData(color: Colors.white)),
+      body: Center(
+        child: _chewieController != null && _videoPlayerController.value.isInitialized
+            ? Chewie(controller: _chewieController!)
+            : const CircularProgressIndicator(color: Colors.white),
+      ),
+    );
+  }
+}
+
+// --- MÀN HÌNH CHÍNH (SỬA ĐỔI) ---
 class UserRequestDetailScreen extends StatefulWidget {
   final Map<String, dynamic> request;
 
@@ -19,64 +79,39 @@ class _UserRequestDetailScreenState extends State<UserRequestDetailScreen> {
   final Color _primaryColor = const Color(0xFFE53935);
   bool _isCancelling = false;
 
-  // --- HÀM XỬ LÝ URL ẢNH (QUAN TRỌNG: FIX LỖI KHÔNG HIỆN ẢNH) ---
+  // ... (Giữ nguyên các hàm _getValidImageUrl, _normalizeStatus, _getStatusBgColor...)
   String _getValidImageUrl(String path) {
     if (path.startsWith('http') || path.startsWith('https')) {
       return path;
     }
-
     String baseUrl = ApiConfig.baseUrl;
-    if (baseUrl.endsWith('/api')) {
-      baseUrl = baseUrl.replaceAll('/api', '');
-    }
-
-    if (baseUrl.endsWith('/')) {
-      baseUrl = baseUrl.substring(0, baseUrl.length - 1);
-    }
+    if (baseUrl.endsWith('/api')) baseUrl = baseUrl.replaceAll('/api', '');
+    if (baseUrl.endsWith('/')) baseUrl = baseUrl.substring(0, baseUrl.length - 1);
 
     String cleanPath = path;
+    if (cleanPath.startsWith('/')) cleanPath = cleanPath.substring(1);
+    if (!cleanPath.startsWith('media/')) cleanPath = 'media/$cleanPath';
 
-    if (cleanPath.startsWith('/')) {
-      cleanPath = cleanPath.substring(1);
-    }
-
-    if (!cleanPath.startsWith('media/')) {
-      cleanPath = 'media/$cleanPath';
-    }
     return '$baseUrl/$cleanPath';
   }
 
-  // --- HELPER STATUS ---
-  String _normalizeStatus(String? rawStatus) {
-    if (rawStatus == null) return 'pending';
-    String s = rawStatus.toLowerCase();
-    if (s.contains('chờ') || s == 'pending') return 'pending';
-    if (s.contains('phân công') || s.contains('điều động') || s == 'in_progress') return 'in_progress';
-    if (s.contains('hoàn thành') || s == 'resolved') return 'resolved';
-    if (s.contains('hủy') || s == 'cancelled') return 'cancelled';
-    return 'pending';
+  // --- THÊM HÀM CHECK VIDEO ---
+  bool _isVideo(String url) {
+    String u = url.toLowerCase();
+    return u.endsWith('.mp4') || u.endsWith('.mov') || u.endsWith('.avi') || u.contains('video');
   }
 
-  Color _getStatusBgColor(String? status) {
-    switch (_normalizeStatus(status)) {
-      case 'resolved': return Colors.green.shade50;
-      case 'in_progress': return Colors.orange.shade50;
-      case 'cancelled': return Colors.red.shade50;
-      default: return Colors.blue.shade50;
-    }
+  // --- THÊM HÀM MỞ PLAYER ---
+  void _openVideo(String url) {
+    Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => SimpleVideoPlayerScreen(videoUrl: url))
+    );
   }
 
-  Color _getStatusTextColor(String? status) {
-    switch (_normalizeStatus(status)) {
-      case 'resolved': return Colors.green.shade700;
-      case 'in_progress': return Colors.orange.shade800;
-      case 'cancelled': return Colors.red.shade700;
-      default: return Colors.blue.shade700;
-    }
-  }
-
-  // --- XỬ LÝ HỦY ---
+  // ... (Giữ nguyên _handleCancelRequest, _makePhoneCall)
   Future<void> _handleCancelRequest() async {
+    // ... code cũ giữ nguyên
     final idToCancel = widget.request['code'] ?? widget.request['id'];
     if (idToCancel == null) return;
 
@@ -108,10 +143,40 @@ class _UserRequestDetailScreenState extends State<UserRequestDetailScreen> {
     }
   }
 
+  // ... (Giữ nguyên các hàm helper status)
+  String _normalizeStatus(String? rawStatus) {
+    if (rawStatus == null) return 'pending';
+    String s = rawStatus.toLowerCase();
+    if (s.contains('chờ') || s == 'pending') return 'pending';
+    if (s.contains('phân công') || s.contains('điều động') || s == 'in_progress') return 'in_progress';
+    if (s.contains('hoàn thành') || s == 'resolved') return 'resolved';
+    if (s.contains('hủy') || s == 'cancelled') return 'cancelled';
+    return 'pending';
+  }
+
+  Color _getStatusBgColor(String? status) {
+    switch (_normalizeStatus(status)) {
+      case 'resolved': return Colors.green.shade50;
+      case 'in_progress': return Colors.orange.shade50;
+      case 'cancelled': return Colors.red.shade50;
+      default: return Colors.blue.shade50;
+    }
+  }
+
+  Color _getStatusTextColor(String? status) {
+    switch (_normalizeStatus(status)) {
+      case 'resolved': return Colors.green.shade700;
+      case 'in_progress': return Colors.orange.shade800;
+      case 'cancelled': return Colors.red.shade700;
+      default: return Colors.blue.shade700;
+    }
+  }
+
+
   @override
   Widget build(BuildContext context) {
     final req = widget.request;
-
+    // ... (Giữ nguyên phần xử lý biến displayCode, lat, lng, description...)
     String displayCode = req['code'] ?? req['id']?.toString().substring(0, 8).toUpperCase() ?? 'N/A';
     String rawStatusText = req['status'] ?? 'Chờ xử lý';
     String normalizedStatus = _normalizeStatus(rawStatusText);
@@ -144,6 +209,8 @@ class _UserRequestDetailScreenState extends State<UserRequestDetailScreen> {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
+            // ... (Giữ nguyên HEADER, ASSIGNMENT, MAP, VICTIM, NOTE) ...
+            // Copy lại các Widget header, assignment, map, victim card như cũ
             // --- HEADER ---
             Container(
               width: double.infinity,
@@ -212,7 +279,7 @@ class _UserRequestDetailScreenState extends State<UserRequestDetailScreen> {
                 ),
               ),
 
-            // --- VỊ TRÍ & BẢN ĐỒ (ĐÃ SỬA DÙNG CARTODB ĐỂ KHÔNG BỊ CHẶN) ---
+            // --- VỊ TRÍ & BẢN ĐỒ ---
             Container(
               padding: const EdgeInsets.all(16),
               decoration: _buildCardDecoration(),
@@ -235,7 +302,6 @@ class _UserRequestDetailScreenState extends State<UserRequestDetailScreen> {
                         options: MapOptions(initialCenter: LatLng(lat, lng), initialZoom: 15),
                         children: [
                           TileLayer(
-                            // SỬA LẠI MAP: Dùng CartoDB Voyager (Đẹp & Không bị chặn)
                             urlTemplate: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
                             subdomains: const ['a', 'b', 'c', 'd'],
                             userAgentPackageName: 'com.vanphuc.rescuevn',
@@ -307,7 +373,7 @@ class _UserRequestDetailScreenState extends State<UserRequestDetailScreen> {
             ),
             const SizedBox(height: 16),
 
-            // --- HÌNH ẢNH (ĐÃ SỬA LOGIC URL) ---
+            // --- HÌNH ẢNH VÀ VIDEO (ĐÃ CẬP NHẬT) ---
             if (mediaUrls.isNotEmpty)
               Container(
                 padding: const EdgeInsets.all(16),
@@ -315,7 +381,7 @@ class _UserRequestDetailScreenState extends State<UserRequestDetailScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildSectionHeader(Icons.image, 'Hình ảnh hiện trường'),
+                    _buildSectionHeader(Icons.perm_media, 'Hình ảnh / Video'),
                     const SizedBox(height: 12),
                     SizedBox(
                       height: 120,
@@ -324,32 +390,57 @@ class _UserRequestDetailScreenState extends State<UserRequestDetailScreen> {
                         itemCount: mediaUrls.length,
                         separatorBuilder: (_, __) => const SizedBox(width: 8),
                         itemBuilder: (context, index) {
-                          // Dùng hàm _getValidImageUrl mới để fix lỗi đường dẫn
                           String fullUrl = _getValidImageUrl(mediaUrls[index]);
+                          bool isVideoFile = _isVideo(fullUrl);
 
-                          return ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: Image.network(
-                              fullUrl,
-                              width: 120,
-                              height: 120,
-                              fit: BoxFit.cover,
-                              // Thêm headers này để ép load lại nếu cần (dù cache 304 vẫn hiện)
-                              headers: const {'Cache-Control': 'no-cache'},
-                              errorBuilder: (ctx, error, stackTrace) {
-                                print("Lỗi load ảnh: $fullUrl - $error");
-                                return Container(
-                                  width: 120, height: 120, color: Colors.grey[200],
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      const Icon(Icons.broken_image, color: Colors.grey),
-                                      const SizedBox(height: 4),
-                                      Text("Lỗi ảnh", style: TextStyle(fontSize: 10, color: Colors.grey[600])),
-                                    ],
+                          return GestureDetector(
+                            onTap: () {
+                              if (isVideoFile) {
+                                _openVideo(fullUrl); // Mở video player
+                              } else {
+                                // Mở xem ảnh full screen (nếu cần, hoặc để trống)
+                              }
+                            },
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: Stack(
+                                children: [
+                                  // 1. Nền (Ảnh hoặc Placeholder Video)
+                                  isVideoFile
+                                      ? Container(
+                                    width: 120, height: 120,
+                                    color: Colors.black87, // Nền đen cho video
+                                    child: const Center(
+                                      child: Icon(Icons.videocam, color: Colors.white24, size: 50),
+                                    ),
+                                  )
+                                      : Image.network(
+                                    fullUrl,
+                                    width: 120, height: 120,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (ctx, err, stack) => Container(
+                                      width: 120, height: 120, color: Colors.grey[300],
+                                      child: const Icon(Icons.broken_image),
+                                    ),
                                   ),
-                                );
-                              },
+
+                                  // 2. Icon Play nếu là Video
+                                  if (isVideoFile)
+                                    Positioned.fill(
+                                      child: Center(
+                                        child: Container(
+                                          padding: const EdgeInsets.all(8),
+                                          decoration: BoxDecoration(
+                                              color: Colors.black45,
+                                              shape: BoxShape.circle,
+                                              border: Border.all(color: Colors.white, width: 2)
+                                          ),
+                                          child: const Icon(Icons.play_arrow, color: Colors.white, size: 30),
+                                        ),
+                                      ),
+                                    )
+                                ],
+                              ),
                             ),
                           );
                         },
@@ -360,7 +451,7 @@ class _UserRequestDetailScreenState extends State<UserRequestDetailScreen> {
               ),
 
             const SizedBox(height: 24),
-
+            // ... (Giữ nguyên nút Hủy)
             if (normalizedStatus == 'pending')
               SizedBox(
                 width: double.infinity,
@@ -386,6 +477,7 @@ class _UserRequestDetailScreenState extends State<UserRequestDetailScreen> {
     );
   }
 
+  // ... (Giữ nguyên các hàm helper UI)
   BoxDecoration _buildCardDecoration() {
     return BoxDecoration(
       color: Colors.white,
