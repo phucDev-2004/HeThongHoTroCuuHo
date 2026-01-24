@@ -1,30 +1,39 @@
-# HeThongHoTroCuuHo
-
 # 🚑 RescueVN - Hệ Thống Quản Lý Cứu Hộ Khẩn Cấp
 
-Nền tảng tích hợp để quản lý và điều phối các yêu cầu cứu hộ khẩn cấp một cách hiệu quả.
+[![Build Status](https://img.shields.io/badge/build-passing-brightgreen)]()
+[![Docker](https://img.shields.io/badge/docker-ready-blue)]()
+[![License](https://img.shields.io/badge/license-MIT-green)]()
 
-**📱 Live Demo**: https://cuuho.vpone.site
+Nền tảng tích hợp để quản lý và điều phối các yêu cầu cứu hộ khẩn cấp một cách hiệu quả, kết nối người gặp nạn với đội cứu hộ theo thời gian thực.
+
+---
+
+## 🔗 Liên Kết & Tải Xuống
+
+| Nền tảng | Trạng thái | Link |
+| :--- | :--- | :--- |
+| **🌍 Live Demo** | Online | [cuuho.vpone.site](https://cuuho.vpone.site) |
+| **📱 Android App** | v1.2.0 | [**Tải xuống APK**](https://github.com/phucDev-2004/HeThongHoTroCuuHo/releases) |
+| **📄 API Docs** | Swagger | [Xem tài liệu API](https://cuuho.vpone.site/api/docs) |
 
 ---
 
 ## 📌 Tổng Quan
 
-**RescueVN** bao gồm ba thành phần chính:
+**RescueVN** bao gồm ba thành phần chính hoạt động đồng bộ:
 
-- **📱 Mobile App (Flutter)** - Ứng dụng di động yêu cầu cứu hộ
-- **🖥️ Web Admin (Nuxt 3)** - Dashboard quản lý cho admin
-- **⚙️ Backend API (Django Ninja)** - API REST + WebSocket
+- **📱 Mobile App (Flutter):** Ứng dụng dành cho người dân gửi yêu cầu và đội cứu hộ nhận nhiệm vụ.
+- **🖥️ Web Admin (Nuxt 3):** Dashboard quản lý trung tâm dành cho điều phối viên.
+- **⚙️ Backend API (Django Ninja):** Hệ thống xử lý logic
 
 ### ✨ Tính Năng Chính
 
-- ✅ **Tạo & Quản lý yêu cầu cứu hộ** - Người dùng có thể gọi cứu hộ với chi tiết về vị trí và tình trạng
-- ✅ **Theo dõi yêu cầu real-time** - Cập nhật trạng thái tức thì qua WebSocket (chưa xử lý → đã nhận → đang xử lý → hoàn thành)
-- ✅ **Tự động định vị GPS** - Lấy tọa độ và địa chỉ tự động từ điện thoại người dùng
-- ✅ **Chia sẻ hình ảnh/video** - Upload ảnh hiện trường giúp đội cứu hộ nắm tình huống
-- ✅ **Đăng nhập bằng Google** - Xác thực nhanh chóng qua tài khoản Google
-- ✅ **Phân công tự động cho đội cứu hộ** - Admin gán yêu cầu đến đội gần nhất
-- ✅ **Xem bản đồ tương tác** - Hiển thị vị trí yêu cầu trên bản đồ
+- ✅ **Tiếp nhận & Xử lý tin báo:** Quản lý vòng đời yêu cầu cứu hộ từ lúc khởi tạo đến khi hoàn tất.
+- ✅ **Điều phối thời gian thực:** Đồng bộ trạng thái tức thì giữa Nạn nhân - Admin - Đội cứu hộ (qua WebSocket).
+- ✅ **Định vị thông minh:** Tự động lấy tọa độ GPS và chuyển đổi sang địa chỉ cụ thể.
+- ✅ **Báo cáo đa phương tiện:** Gửi hình ảnh/video hiện trường để đánh giá mức độ nghiêm trọng.
+- ✅ **Truy cập nhanh (OAuth):** Đăng nhập siêu tốc qua Google để giảm thời gian thao tác.
+- ✅ **Bản đồ tác nghiệp số:** Trực quan hóa vị trí nạn nhân và đội cứu hộ trên bản đồ tương tác.
 
 ---
 
