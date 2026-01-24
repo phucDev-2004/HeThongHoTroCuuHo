@@ -5,3 +5,4 @@ from .refresh_token_model import RefreshToken
 from .rescue_team_model import RescueTeam, RescueAssignments
 from .rescue_requests_model import RescueRequest, RescueMedia
 from .condition_type_model import ConditionType
+from .notification_model import Notification

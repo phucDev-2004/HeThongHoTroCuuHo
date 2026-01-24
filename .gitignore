@@ -1,6 +1,9 @@
 /DATA
-/frontend
+# /frontend
 __pycache__/
 *.env
 migrations/
 media/
+venv/
+*.txt
+DEPLOYMENT_GUIDE.md

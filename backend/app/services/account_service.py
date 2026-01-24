@@ -17,7 +17,7 @@ class IAccountService(ABC):
     def get_list_accounts(self, *, limit: int, cursor: Optional[str]) -> Dict[str, Any]:
         pass
     @abstractmethod
-    def update_infor(self, current_user, account_id: str, payload: AccountUpdate):
+    def update_infor(self, current_user, account_id: str, payload):
         pass
     @abstractmethod
     def get_profile(self, account_id: str):
@@ -86,37 +86,57 @@ class AccountService(IAccountService):
             "next_cursor":next_cursor
         }
 
-    def update_infor(self, current_user, account_id: str, payload: AccountUpdate):
+    def update_infor(self, current_user, account_id: str, payload):
         self.check_permission(current_user, account_id)
 
-        if payload.email is not None:
-            if self.account_repo.exists_by_email(payload.email):
+        new_phone = getattr(payload, "phone", None)
+        new_email = getattr(payload, "email", None)
+
+        if new_email:
+            existing_email = self.account_repo.get_by_email(new_email)
+            if existing_email and existing_email.id != account_id:
                 raise BaseAppException(
                     message="Email đã tồn tại",
                     code=400,
-                    details={"email": payload.email}
+                    details={"email": new_email}
                 )
-    
+
+        if new_phone is not None:
+            if current_user.role.code != RoleCode.ADMIN:
+                new_phone = None 
             
+            else:
+                existing_phone = self.account_repo.get_by_phone(new_phone)
+                if existing_phone and existing_phone.id != account_id:
+                     raise BaseAppException(
+                        message="Số điện thoại đã tồn tại",
+                        code=400,
+                        details={"phone": new_phone}
+                    )
+
         with transaction.atomic():
             account = self.account_repo.get_for_update(account_id=account_id)
             update_fields = []
-            
+
             if payload.email:
                 account.email = payload.email
                 update_fields.append("email")
 
+            # Cập nhật Full Name
             if payload.full_name:
                 account.full_name = payload.full_name
                 update_fields.append("full_name")
 
+            # Cập nhật Password
             if payload.password:
                 account.password_hash = jwt_provider.hash_password(payload.password)
                 update_fields.append("password_hash")
 
-            if update_fields:
-                account.save(update_fields=update_fields)
-        return account             
+            if new_phone:
+                account.phone = new_phone 
+                update_fields.append("phone")
+        
+        return account           
 
 
 

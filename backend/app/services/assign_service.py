@@ -1,35 +1,50 @@
+import json
+
 from django.db import transaction, connection
 from django.http import Http404
 from django.core.exceptions import ValidationError, PermissionDenied
 from django.db.models.expressions import RawSQL
 from django.utils import timezone
+
 from ..models import RescueRequest, RescueTeam, RescueAssignments
 from ..enum.rescue_status import TeamStatus, TaskStatus, RescueStatus, RESCUE_STATUS
 from ..enum.role_enum import RoleCode
-import json
+from ..services.notification_service import NotificationService, Notification
 
-
-from asgiref.sync import async_to_sync
-from channels.layers import get_channel_layer
 
 class AssignService:
 
-    @staticmethod
-    def _push_update(groups: list, event_name: str, payload_data: dict):
-        channel_layer = get_channel_layer()
-        message = {
-            "type": "send_update",
-            "data": {
-                "event": event_name,
-                "data": payload_data
-            }
-        }
-        try:
-            for group in groups:
-                if group: 
-                    async_to_sync(channel_layer.group_send)(group, message)
-        except Exception as e:
-            print(f"Socket Error: {e}")
+    BASE_ASSIGNMENT_SQL = """
+        SELECT
+            ra.id              AS assignment_id,
+            ra.status,
+            ra.assigned_at,
+
+            -- rescue request
+            rr.code,
+            rr.name,
+            rr.contact_phone,
+            rr.adults,
+            rr.children,
+            rr.elderly,
+            rr.address,
+            ST_Y(rr.location)  AS latitude,
+            ST_X(rr.location)  AS longitude,
+            rr.conditions,
+            rr.description,
+
+            -- rescue team
+            rt.id              AS team_id,
+            rt.name            AS team_name,
+            rt.leader_name     AS leader_name,
+            rt.hotline         AS team_phone,
+            ST_Y(rt.location)  AS team_latitude,
+            ST_X(rt.location)  AS team_longitude
+
+        FROM rescue_assignments ra
+        JOIN rescue_requests rr ON rr.id = ra.rescue_request_id
+        JOIN rescue_teams rt ON rt.id = ra.rescue_team_id
+    """
 
     @staticmethod
     def _build_permission(user):
@@ -72,18 +87,40 @@ class AssignService:
 
             # --- Socket Notification ---
             payload = {
-                "task_id": task.id,
-                "request_id": request.id,
-                "team_id": team.id,
+                "task_id": str(task.id),
+                "request_id": str(request.id),
+                "team_id": str(team.id),
                 "status": "ASSIGNED",
                 "msg": f"Nhiệm vụ mới tại: {request.address}",
+                "time": str(timezone.now())
             }
             
-            target_groups = ["rescue_admin", f"rescue_team_{team.id}"]
+            target_groups = [
+                "rescue_admin", 
+                f"rescue_team_{team.id}"
+            ]
+
             if request.account_id:
                 target_groups.append(f"user_{request.account_id}")
 
-            AssignService._push_update(groups=target_groups, event_name="NEW_TASK", payload_data=payload)
+
+            account_ids = []
+            if request.account_id:
+                account_ids.append(str(request.account_id))
+
+            if team.account_id:
+                account_ids.append(str(team.account_id))
+
+            NotificationService.send_notify(
+                groups=target_groups,
+                event=Notification.NotificationType.NEW_TASK,
+                title="Nhiệm vụ mới",
+                message= f"Đội {team.name} đã được phân công xử lý yêu cầu cứu hộ.",
+                data=payload,
+                account_ids=account_ids
+            )
+
+
             return task
         
         
@@ -120,38 +157,8 @@ class AssignService:
 
         where_clause, params = AssignService._build_permission(user)
 
-        BASE_ASSIGNMENT_SQL = """
-            SELECT
-                ra.id              AS assignment_id,
-                ra.status,
-                ra.assigned_at,
-
-                -- rescue request
-                rr.code,
-                rr.name,
-                rr.contact_phone,
-                rr.adults,
-                rr.children,
-                rr.elderly,
-                rr.address,
-                ST_Y(rr.location)  AS latitude,
-                ST_X(rr.location)  AS longitude,
-                rr.conditions,
-                rr.description,
-
-                -- rescue team
-                rt.id              AS team_id,
-                rt.name            AS team_name,
-                rt.hotline         AS team_phone,
-                ST_Y(rt.location)  AS team_latitude,
-                ST_X(rt.location)  AS team_longitude
-
-            FROM rescue_assignments ra
-            JOIN rescue_requests rr ON rr.id = ra.rescue_request_id
-            JOIN rescue_teams rt ON rt.id = ra.rescue_team_id
-        """
         sql = f"""
-            {BASE_ASSIGNMENT_SQL}
+            {AssignService.BASE_ASSIGNMENT_SQL}
             {where_clause}
             ORDER BY ra.created_at DESC
         """
@@ -169,6 +176,36 @@ class AssignService:
                 result.append(AssignService.map_assignment(row_dict))
             return result
     
+    @staticmethod
+    def get_assignment_detail(user, assignment_id: str):
+        """Lấy chi tiết 1 nhiệm vụ"""
+        
+        perm_clause, perm_params = AssignService._build_permission(user)
+
+        if perm_clause:
+            final_where = f"{perm_clause} AND ra.id = %s"
+        else:
+            final_where = "WHERE ra.id = %s"
+        
+        params = perm_params + [assignment_id]
+
+        sql = f"""
+            {AssignService.BASE_ASSIGNMENT_SQL}
+            {final_where}
+        """
+
+        with connection.cursor() as cursor:
+            cursor.execute(sql, params)
+            row = cursor.fetchone()
+            
+            if not row:
+                raise Http404("Không tìm thấy nhiệm vụ hoặc bạn không có quyền truy cập.")
+
+            columns = [col[0] for col in cursor.description]
+            row_dict = dict(zip(columns, row))
+            
+            return AssignService.map_assignment(row_dict)
+
     @staticmethod   
     def map_assignment(row: dict) -> dict:
 
@@ -199,6 +236,7 @@ class AssignService:
             "rescue_team": {
                 "team_id": row["team_id"],
                 "team_name": row["team_name"],
+                "leader_name": row["leader_name"],
                 "team_latitude": row["team_latitude"],
                 "team_longitude": row["team_longitude"],
                 "team_phone": row["team_phone"],
@@ -225,8 +263,23 @@ class AssignService:
         except RescueAssignments.DoesNotExist:
             raise ValidationError("Nhiệm vụ không tồn tại hoặc sai trạng thái.")
         
+
+    
     @staticmethod
-    def confirm_team_start(assignment_id: str, account_id: str):
+    def _update_team_location_raw(team_id, lat, lng):
+        """Hàm cập nhật vị trí nhanh bằng SQL thuần"""
+        sql = """
+            UPDATE rescue_teams 
+            SET location = ST_SetSRID(ST_MakePoint(%s, %s), 4326),
+                updated_at = NOW()
+            WHERE id = %s
+        """
+        with connection.cursor() as cursor:
+            cursor.execute(sql, [lng, lat, team_id])
+
+
+    @staticmethod
+    def confirm_team_start(assignment_id: str, account_id: str, lat: float, lng: float):
         with transaction.atomic():
             task = AssignService._get_team_task(assignment_id, account_id, TaskStatus.ASSIGNED)
             
@@ -242,43 +295,74 @@ class AssignService:
             rescue_req.save(update_fields=['status'])
             
             payload = {
-                "task_id": task.id, 
+                "task_id": str(task.id), 
                 "status": "IN_PROGRESS",
-                "msg": "Đội cứu hộ đang di chuyển"
+                "msg": f"Đội {task.rescue_team.name} đã bắt đầu di chuyển tới điểm cứu hộ.",
+                "team_id": str(task.rescue_team.id)
             }
             
-            target_groups = ["rescue_admin", f"rescue_team_{task.rescue_team.id}"]
+            target_groups = ["rescue_admin"]
             if rescue_req.account_id:
                 target_groups.append(f"user_{rescue_req.account_id}")
                 
-            AssignService._push_update(groups=target_groups, event_name="TASK_UPDATE", payload_data=payload)
+            account_ids = []
+            if rescue_req.account_id:
+                account_ids.append(str(rescue_req.account_id))
+
+            AssignService._update_team_location_raw(task.rescue_team_id, lat, lng)
+
+            NotificationService.send_notify(
+                groups=target_groups,
+                event=Notification.NotificationType.TASK_UPDATE,
+                title="Đội cứu hộ đang di chuyển",
+                message=f"Đội {task.rescue_team.name} đã bắt đầu di chuyển tới điểm cứu hộ.",
+                data=payload,
+                account_ids=account_ids
+            )
+
             return task
         
     @staticmethod
-    def confirm_team_arrived(assignment_id: str, account_id: str):
+    def confirm_team_arrived(assignment_id: str, account_id: str,  lat: float, lng: float):
         """Bước 4: Đội báo đã đến nơi"""
         with transaction.atomic():
             task = AssignService._get_team_task(assignment_id, account_id, TaskStatus.IN_PROGRESS)
             
             task.status = TaskStatus.ARRIVED
             task.save(update_fields=['status'])
+
             
             payload = {
-                "task_id": task.id, 
+                "task_id": str(task.id), 
                 "status": "ARRIVED", 
-                "msg": "Đội cứu hộ đã đến vị trí!"
+                "msg": f"Đội {task.rescue_team.name} đã có mặt tại vị trí cứu hộ.",
+                "team_id": str(task.rescue_team.id)
             }
 
-            target_groups = ["rescue_admin", f"rescue_team_{task.rescue_team.id}"]
+            target_groups = ["rescue_admin"]
             if task.rescue_request.account_id:
                 target_groups.append(f"user_{task.rescue_request.account_id}")
 
-            AssignService._push_update(groups=target_groups, event_name="TASK_UPDATE", payload_data=payload)
+            account_ids = []
+
+            if task.rescue_request.account_id:
+                account_ids.append(str(task.rescue_request.account_id))
+
+            AssignService._update_team_location_raw(task.rescue_team_id, lat, lng)
+
+            NotificationService.send_notify(
+                groups=target_groups, 
+                event=Notification.NotificationType.TASK_UPDATE,
+                title="Đội cứu hộ đã đến hiện trường",
+                message=f"Đội {task.rescue_team.name} đã có mặt tại vị trí cứu hộ.",
+                data=payload,
+                account_ids=account_ids
+            )
 
             return task
     
     @staticmethod
-    def complete_task(assignment_id: str, account_id: str, outcome_note: str = ""):
+    def complete_task(assignment_id: str, account_id: str, lat: float, lng: float, outcome_note: str = ""):
         """Bước 5: Hoàn thành nhiệm vụ"""
         with transaction.atomic():
             # Lấy task đang chạy hoặc đã đến nơi
@@ -308,16 +392,96 @@ class AssignService:
             rescue_req.save()
 
             payload = {
-                "task_id": task.id, 
-                "request_id": rescue_req.id,
+                "task_id": str(task.id), 
+                "request_id": str(rescue_req.id),
                 "status": "COMPLETED",
-                "msg": "Nhiệm vụ hoàn thành"
+                "msg": f"{task.rescue_team.name} đã hoàn thành nhiệm vụ",
+                "team_id": str(team.id)
             }
 
-            target_groups = ["rescue_admin", f"rescue_team_{team.id}"]
+            target_groups = ["rescue_admin"]
             if rescue_req.account_id:
                 target_groups.append(f"user_{rescue_req.account_id}")
 
-            AssignService._push_update(groups=target_groups, event_name="TASK_COMPLETED", payload_data=payload)
+            account_ids = []
+            if rescue_req.account_id:
+                account_ids.append(str(rescue_req.account_id))
+
+            AssignService._update_team_location_raw(team.id, lat, lng)
+
+            NotificationService.send_notify(
+                groups=target_groups,
+                event=Notification.NotificationType.COMPLETE,
+                title="Nhiệm vụ hoàn thành",
+                message=  f"{task.rescue_team.name} đã hoàn thành nhiệm vụ",
+                data=payload,
+                account_ids=account_ids
+            )
 
             return task
+        
+
+    @staticmethod
+    def cancel_assignment(assignment_id: str, admin_id: str, reason: str = ""):
+        """
+        Hủy phân công (Xóa bản ghi phân công).
+        - Đội cứu hộ -> AVAILABLE
+        - Yêu cầu -> PENDING
+        - Xóa Assignment
+        """
+        with transaction.atomic():
+            # 1. Tìm nhiệm vụ và khóa dòng (Lock)
+            try:
+                task = RescueAssignments.objects.select_for_update().select_related('rescue_team', 'rescue_request').get(id=assignment_id)
+            except RescueAssignments.DoesNotExist:
+                raise Http404("Không tìm thấy nhiệm vụ phân công này.")
+
+            # 2. Validate: Không thể xóa nhiệm vụ đã hoàn thành (để giữ lịch sử)
+            if task.status == TaskStatus.COMPLETED:
+                raise ValidationError("Nhiệm vụ đã hoàn thành, không thể hủy/xóa.")
+
+            # 3. Lấy các object liên quan trước khi xóa task
+            team = task.rescue_team
+            request = task.rescue_request
+
+            # 4. Revert (Hoàn tác) trạng thái Đội cứu hộ -> AVAILABLE
+            team.status = TeamStatus.AVAILABLE
+            team.save(update_fields=['status'])
+
+            request.status = RESCUE_STATUS[RescueStatus.PENDING]
+            request.save(update_fields=['status'])
+
+            # 6. Chuẩn bị dữ liệu thông báo (Phải làm trước khi delete)
+            payload = {
+                "task_id": str(task.id), # Frontend có thể dùng ID này để xóa dòng khỏi UI
+                "request_id": str(request.id),
+                "status": "DELETED", # Custom status báo hiệu đã bị xóa
+                "msg": f"Lệnh điều động đã bị hủy bỏ. Lý do: {reason}",
+                "team_id": str(team.id)
+            }
+
+            # Xác định người nhận thông báo
+            target_groups = ["rescue_admin", f"rescue_team_{team.id}"]
+            account_ids = []
+            
+            if request.account_id:
+                target_groups.append(f"user_{request.account_id}")
+                account_ids.append(str(request.account_id))
+            
+            if team.account_id:
+                account_ids.append(str(team.account_id))
+
+            # 7. Gửi thông báo
+            NotificationService.send_notify(
+                groups=target_groups,
+                event=Notification.NotificationType.TASK_UPDATE, # Hoặc định nghĩa type mới: TASK_REVOKED
+                title="Thu hồi lệnh điều động",
+                message=f"Admin đã hủy lệnh điều động đội {team.name}. Lý do: {reason}",
+                data=payload,
+                account_ids=account_ids
+            )
+
+            # 8. XÓA BẢN GHI (DELETE)
+            task.delete()
+
+            return True

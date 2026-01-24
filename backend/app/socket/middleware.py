@@ -5,10 +5,9 @@ from channels.db import database_sync_to_async
 from django.contrib.auth.models import AnonymousUser
 from django.conf import settings
 from urllib.parse import parse_qs
+from http.cookies import SimpleCookie
 import jwt
-from app.models import Account # Import model Account của bạn
-
-# app/socket/middleware.py
+from app.models import Account
 
 @database_sync_to_async
 def get_user(token_key):
@@ -24,9 +23,6 @@ def get_user(token_key):
             return AnonymousUser()
 
         close_old_connections() 
-        
-        # --- SỬA DÒNG NÀY ---
-        # Thêm .select_related('role') để lấy luôn bảng Role
         return Account.objects.select_related('role').get(id=user_id) 
 
     except Exception as e:
@@ -35,16 +31,41 @@ def get_user(token_key):
 
 class JwtAuthMiddleware(BaseMiddleware):
     async def __call__(self, scope, receive, send):
-        # Lấy token từ URL: ws://...?token=XYZ
-        query_string = scope.get("query_string", b"").decode("utf-8")
-        query_params = parse_qs(query_string)
-        token = query_params.get("token")
+        headers = dict(scope.get("headers", []))
+        token = None
+        
+        # --- CÁCH 1: Lấy từ Header  ---
+        if b"authorization" in headers:
+            try:
+                auth_header = headers[b"authorization"].decode("utf-8")
+                # Logic an toàn: Tự động xóa chữ Bearer bất kể viết hoa/thường
+                # Thay vì split() cứng nhắc, ta dùng replace
+                token = auth_header.replace("Bearer", "").replace("bearer", "").strip()
+            except ValueError:
+                pass
+        
+        # --- CÁCH 2: Lấy từ Cookie ---
+        if not token and b"cookie" in headers:
+            try:
+                cookie_header = headers[b"cookie"].decode("utf-8")
+                cookies = SimpleCookie(cookie_header)
+                if "access_token" in cookies:
+                    token = cookies["access_token"].value
+            except:
+                pass
+
+        # --- CÁCH 3: Lấy từ Query Params ---
+        if not token:
+            query_string = scope.get("query_string", b"").decode("utf-8")
+            query_params = parse_qs(query_string)
+            
+            # parse_qs trả về dict có value là list: {'token': ['xyz']}
+            if "token" in query_params:
+                token = query_params["token"][0]
 
         if token:
-            # Nếu có token thì check
-            scope["user"] = await get_user(token[0])
+            scope["user"] = await get_user(token)
         else:
-            # Không có thì thôi
             scope["user"] = AnonymousUser()
 
         return await super().__call__(scope, receive, send)

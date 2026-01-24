@@ -1,5 +1,5 @@
 from ninja import Router
-from app.schemas.rescue_schema import RescueRequestSchema, ConditionTypeOutSchema, ConditionTypeSchema, RescueMapPoint, PaginatedRescueResponse, RescueMapPointCluster
+from app.schemas.rescue_schema import RescueRequestSchema, ConditionTypeOutSchema, ConditionTypeSchema, RescueMapPoint, PaginatedRescueResponse, RescueMapPointCluster, RescueRequestTableRow
 from app.services import RescueRequestService, ConditionTypeService
 from app.security.jwt_provider import JwtProvider
 from app.middleware.auth import JWTBearer
@@ -12,24 +12,6 @@ rescue_service = RescueRequestService()
 condition_service = ConditionTypeService()
 
 auth_bearer = JWTBearer()
-
-# User gửi requets cứu hộ
-@router.post("/rescue", auth=auth_bearer)
-def create_rescue(request, data: RescueRequestSchema):
-    account = request.auth 
-    new_request = rescue_service.create_request(data, account_id=str(account.id))
-    return new_request
-
-@router.post("/rescue/{rescue_id}/media", response={200: dict, 404: dict})
-def upload_rescue_media(request, rescue_id: str, files: List[UploadedFile] = File(...)):
-    result = RescueRequestService.upload_media(rescue_id, files)
-    if not result:
-        return 404, {"message": "Không tìm thấy yêu cầu cứu hộ"}
-    
-    return {
-        "success": True,
-        "uploaded_count": len(result)
-    }
 
 
 @router.get("/my-requests/history", auth=JWTBearer(), response=PaginatedRescueResponse)
@@ -66,6 +48,50 @@ def get_map_points(request,
     
 
 
+@router.post("/condition", response=ConditionTypeOutSchema)
+def create_condition(request, data: ConditionTypeSchema):
+    obj = condition_service.create(name=data.name)
+    return {"id": str(obj.id), "name": obj.name}
+
+@router.get("/condition", response=list[ConditionTypeOutSchema])
+def list_condition(request):
+    objs = condition_service.list()
+    return [{"id": str(obj.id), "name": obj.name} for obj in objs]
+
+
+@router.put("/condition/{id}", response=ConditionTypeOutSchema)
+def update_condition(request, id: str, data: ConditionTypeSchema):
+    obj = condition_service.update(id, data.name)
+    if not obj:
+        return {"error": "Not found"}
+    return {"id": str(obj.id), "name": obj.name}
+
+@router.delete("/condition/{id}")
+def delete_condition(request, id: str):
+    success = condition_service.delete(id)
+    return {"success": success}
+
+
+# User gửi requets cứu hộ
+@router.post("/rescue", auth=auth_bearer)
+def create_rescue(request, data: RescueRequestSchema):
+    account = request.auth 
+    new_request = rescue_service.create_request(data, account_id=str(account.id))
+    return new_request
+
+
+@router.post("/rescue/{rescue_id}/media", response={200: dict, 404: dict})
+def upload_rescue_media(request, rescue_id: str, files: List[UploadedFile] = File(...)):
+    result = RescueRequestService.upload_media(rescue_id, files)
+    if not result:
+        return 404, {"message": "Không tìm thấy yêu cầu cứu hộ"}
+    
+    return {
+        "success": True,
+        "uploaded_count": len(result)
+    }
+
+
 @router.get("", response=PaginatedRescueResponse)
 def list_rescue_requests(request, 
                         page: int = 1, 
@@ -84,27 +110,17 @@ def list_rescue_requests(request,
         search=search
     )
 
-
-@router.post("/condition", response=ConditionTypeOutSchema)
-def create_condition(request, data: ConditionTypeSchema):
-    obj = condition_service.create(name=data.name)
-    return {"id": str(obj.id), "name": obj.name}
-
-@router.get("/condition", response=list[ConditionTypeOutSchema])
-def list_condition(request):
-    objs = condition_service.list()
-    return [{"id": str(obj.id), "name": obj.name} for obj in objs]
-
-@router.put("/condition/{id}", response=ConditionTypeOutSchema)
-def update_condition(request, id: str, data: ConditionTypeSchema):
-    obj = condition_service.update(id, data.name)
-    if not obj:
-        return {"error": "Not found"}
-    return {"id": str(obj.id), "name": obj.name}
-
-@router.delete("/condition/{id}")
-def delete_condition(request, id: str):
-    success = condition_service.delete(id)
-    return {"success": success}
+@router.get("/{request_id}", response={200: RescueRequestTableRow, 404: dict})
+def get_rescue_detail(request, request_id: str):
+    """
+    API lấy chi tiết theo ID. 
+    Đặt cuối cùng vì nó bắt mọi pattern dạng /{chuỗi-bất-kỳ}
+    """
+    data = RescueRequestService.get_request_detail(str(request_id))
+    
+    if not data:
+        return 404, {"message": "Không tìm thấy yêu cầu cứu hộ"}
+    
+    return 200, data
 
 

@@ -1,0 +1,39 @@
+:root {
+  /* Ghi đè màu gốc của Element Plus thành màu Đỏ (#DC2626) */
+  --el-color-primary: #DC2626;
+  --el-color-primary-light-3: #EF4444;
+  --el-color-primary-light-5: #F87171;
+  --el-color-primary-light-7: #FCA5A5;
+  --el-color-primary-light-9: #FEE2E2;
+  --el-color-primary-dark-2: #B91C1C;
+}
+
+/* Đảm bảo nền trang web hơi xám để làm nổi bật nội dung */
+body {
+    background-color: #F3F4F6; /* gray-100 */
+    margin: 0;
+}
+
+/* Tùy chỉnh Popover Notification */
+.notification-popover.el-popover {
+    padding: 0 !important;
+    border-radius: 16px !important; /* Bo góc lớn hơn */
+    border: none !important; /* Bỏ border mặc định xấu */
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important; /* Bóng đổ sâu */
+    overflow: hidden;
+}
+
+/* Custom Scrollbar */
+.scrollbar-thin::-webkit-scrollbar {
+    width: 5px;
+}
+.scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: #cbd5e1;
+    border-radius: 20px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background-color: #94a3b8;
+}

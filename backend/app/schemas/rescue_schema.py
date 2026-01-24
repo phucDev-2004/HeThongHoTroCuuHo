@@ -48,6 +48,7 @@ class RescueMapPoint(Schema):
     id: uuid.UUID
     code:str
     name: str
+    address: str
     adults: Optional[int] = 0
     children: Optional[int] = 0
     elderly: Optional[int] = 0

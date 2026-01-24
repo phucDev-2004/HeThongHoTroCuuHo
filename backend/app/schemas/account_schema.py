@@ -2,7 +2,7 @@ from ..models import Account, Role
 from ..enum.role_enum import RoleCode
 from ninja import ModelSchema, Schema
 from ..schemas.auth_schema import RegisterRequest
-from .types import StrongPassword, CleanName
+from .types import StrongPassword, CleanName, VNPhone
 from pydantic import EmailStr
 from typing import List, Optional
 
@@ -32,5 +32,11 @@ class AccountListResponse(Schema):
 
 class AccountUpdate(Schema):
     email: Optional[EmailStr] = None
+    full_name: Optional[CleanName] = None
+    password: Optional[StrongPassword] = None
+
+class AdminAccountUpdate(Schema):
+    email: Optional[EmailStr] = None
+    phone: Optional[VNPhone] = None
     full_name: Optional[CleanName] = None
     password: Optional[StrongPassword] = None

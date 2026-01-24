@@ -15,16 +15,23 @@ class RescueMapConsumer(AsyncWebsocketConsumer):
         self.joined_groups = []
 
         self.user = self.scope["user"]
+
+        # --- THÊM LOG DEBUG ---
+        print(f"DEBUG WS: User đang connect là: {self.user}")
+        # ----------------------
         
         if self.user is None or isinstance(self.user, AnonymousUser):
+            print("DEBUG WS: User chưa login -> Đóng kết nối") # Log lỗi
             await self.close()
             return
 
         user_role_code = await self.get_user_role_code(self.user)
+        print(f"DEBUG WS: Role của user là: {user_role_code}") # Check role
 
         await self.join_group(f"user_{self.user.id}")
 
         if user_role_code == RoleCode.ADMIN:
+            print("DEBUG WS: Đã join group ADMIN") # Check join group
             await self.join_group("rescue_admin")
         
         elif user_role_code == RoleCode.RESCUER:

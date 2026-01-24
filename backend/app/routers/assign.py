@@ -4,7 +4,7 @@ from django.http import Http404
 
 from ..schemas.assignments_schema import (
     AssignTaskIn, ConfirmStartIn, CompleteTaskIn, 
-    FindNearest, NearestTeam, AssignmentOut
+    FindNearest, NearestTeam, AssignmentOut, LocationUpdateIn
 )
 from ..services import AssignService
 from app.middleware.auth import JWTBearer
@@ -75,8 +75,10 @@ def confirm_start_endpoint(request, payload: ConfirmStartIn):
     account = request.auth
     try:
         task = AssignService.confirm_team_start(
+            account_id=account.id,
             assignment_id=payload.assignment_id,
-            account_id=account.id
+            lat=payload.latitude,
+            lng=payload.longitude
         )
 
         return 200, {
@@ -98,8 +100,10 @@ def confirm_arrived_endpoint(request, payload: ConfirmStartIn):
     account = request.auth
     try:
         task = AssignService.confirm_team_arrived(
+            account_id=account.id,
             assignment_id=payload.assignment_id,
-            account_id=account.id
+            lat=payload.latitude,
+            lng=payload.longitude
         )
         return 200, {
             "success": True, 
@@ -117,8 +121,10 @@ def complete_task_endpoint(request, payload: CompleteTaskIn):
     account = request.auth
     try:
         task = AssignService.complete_task(
-            assignment_id=payload.assignment_id,
             account_id=account.id,
+            assignment_id=payload.assignment_id,
+            lat=payload.latitude,
+            lng=payload.longitude,
             outcome_note=payload.outcome_note
         )
         return 200, {
@@ -128,3 +134,59 @@ def complete_task_endpoint(request, payload: CompleteTaskIn):
         }
     except Exception as e:
         return 400, {"success": False, "message": str(e)}
+
+@router.get("/assignments/{assignment_id}", response=AssignmentOut, auth=auth_bearer)
+def assignment_detail(request, assignment_id: str):
+    """
+    Lấy chi tiết một nhiệm vụ theo ID.
+    - Admin: Xem được bất kỳ nhiệm vụ nào.
+    - Rescuer: Chỉ xem được nhiệm vụ của đội mình.
+    """
+    user = request.auth
+    task = AssignService.get_assignment_detail(user=user, assignment_id=assignment_id)
+    return task
+
+@router.delete("/assignments/{assignment_id}", auth=auth_bearer, response={200: dict, 400: dict, 404: dict})
+def delete_assignment(request, assignment_id: str):
+    """
+    API Hủy phân công (Xóa Assignment).
+    """
+    try:
+        # Lấy ID của Admin đang thao tác
+        admin_id = str(request.auth.id)
+        
+        AssignService.cancel_assignment(
+            assignment_id=assignment_id,
+            admin_id=admin_id
+        )
+        
+        return 200, {
+            "success": True, 
+            "message": "Đã hủy phân công và khôi phục trạng thái thành công."
+        }
+        
+    except Http404 as e:
+        return 404, {"message": str(e)}
+    except ValidationError as e:
+        return 400, {"message": str(e)}
+    except Exception as e:
+        return 400, {"message": f"Lỗi hệ thống: {str(e)}"}
+
+@router.post("/ping-location", auth=auth_bearer, response={200: dict})
+@require_role(RoleCode.RESCUER)
+def ping_location_endpoint(request, payload: LocationUpdateIn):
+    """API gọi ngầm để cập nhật vị trí xe"""
+    account = request.auth
+    
+    try:
+        team_id = account.id 
+        
+        AssignService._update_team_location_raw(
+            team_id=team_id, 
+            lat=payload.latitude, 
+            lng=payload.longitude
+        )
+        return 200, {"success": True}
+    except Exception as e:
+        print(f"Tracking error: {e}")
+        return 200, {"success": True}

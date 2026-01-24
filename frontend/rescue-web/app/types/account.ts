@@ -1,0 +1,26 @@
+export interface Role {
+    id: number;
+    name: string;
+}
+
+export interface Account {
+    id: string;
+    email: string;
+    phone?: string;
+    role: Role;
+    is_active: boolean;
+    created_at: string;
+}
+
+export interface CreateAccountPayload {
+    full_name: string ;
+    password: string;
+    re_password?: string;
+    role_code: string; 
+    phone?: string;
+}
+
+export interface AccountListResponse {
+  items: Account[];
+  next_cursor: string | null;
+}
