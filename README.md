@@ -32,8 +32,8 @@ Nền tảng tích hợp để quản lý và điều phối các yêu cầu c�
 - ✅ **Điều phối thời gian thực:** Đồng bộ trạng thái tức thì giữa Nạn nhân - Admin - Đội cứu hộ (qua WebSocket).
 - ✅ **Định vị thông minh:** Tự động lấy tọa độ GPS và chuyển đổi sang địa chỉ cụ thể.
 - ✅ **Báo cáo đa phương tiện:** Gửi hình ảnh/video hiện trường để đánh giá mức độ nghiêm trọng.
-- ✅ **Truy cập nhanh (OAuth):** Đăng nhập siêu tốc qua Google để giảm thời gian thao tác.
-- ✅ **Bản đồ tác nghiệp số:** Trực quan hóa vị trí nạn nhân và đội cứu hộ trên bản đồ tương tác.
+- ✅ **Truy cập nhanh (OAuth):** Đăng nhập qua Google để giảm thời gian thao tác.
+- ✅ **Bản đồ tác nghiệp số:** Trực quan hóa vị trí nạn nhântrên bản đồ.
 
 ---
 
